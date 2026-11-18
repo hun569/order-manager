@@ -1,0 +1,1282 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>공사·구매 발주관리</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#F6F5F1; --card:#fff; --ink:#1F2937; --sub:#4B5563; --mute:#9CA3AF; --line:#E5E7EB;
+  --navy:#1E3A8A; --navy-l:#E0E7FF; --amber:#D97706; --amber-l:#FEF3C7;
+  --green:#059669; --green-l:#D1FAE5; --red:#DC2626; --red-l:#FEE2E2; --gray-l:#F3F4F6;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Malgun Gothic","맑은 고딕",system-ui,sans-serif}
+header{background:var(--navy);color:#fff;padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header h1{font-size:19px;margin:0;font-weight:700}
+header .sub{opacity:.75;font-size:12px}
+header .sp{flex:1}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);padding:7px 12px;border-radius:6px}
+button:hover{border-color:var(--navy)}
+button.pri{background:var(--amber);border-color:var(--amber);color:#fff;font-weight:700}
+button.pri:hover{filter:brightness(.95)}
+button.nav{background:var(--navy);border-color:var(--navy);color:#fff}
+button.ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.4)}
+button.sm{padding:3px 8px;font-size:12px}
+button.danger{color:var(--red);border-color:#FCA5A5}
+main{padding:20px 24px;max-width:1500px;margin:0 auto}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;cursor:pointer}
+.kpi:hover{border-color:var(--navy)}
+.kpi.on{outline:2px solid var(--navy)}
+.kpi .l{font-size:12px;color:var(--sub)}
+.kpi .v{font-size:26px;font-weight:700;margin-top:2px}
+.kpi .v small{font-size:13px;font-weight:400;color:var(--sub);margin-left:3px}
+.alerts{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--amber);border-radius:10px;padding:10px 14px;margin-bottom:16px}
+.alerts h3{margin:0 0 6px;font-size:14px}
+.alerts ul{margin:0;padding-left:18px}
+.alerts li{margin:2px 0;cursor:pointer}
+.alerts li:hover{text-decoration:underline}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.tools input,.tools select{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff}
+.tools .sp{flex:1}
+.tablewrap{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{background:var(--gray-l);position:sticky;top:0;font-weight:700;color:var(--sub);cursor:pointer;user-select:none}
+td.title{white-space:normal;min-width:260px}
+td.num,th.num{text-align:right}
+th.ck,td.ck{width:34px;text-align:center;cursor:default}
+td.ck input,th.ck input{width:16px;height:16px;cursor:pointer}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:#FAFAF7}
+.badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:700}
+.s0{background:var(--navy-l);color:var(--navy)}
+.s1{background:var(--amber-l);color:#92400E}
+.s2{background:var(--green-l);color:#065F46}
+.s3{background:#EDE9FE;color:#5B21B6}
+.s4{background:var(--gray-l);color:var(--sub)}
+.warn{color:var(--red);font-weight:700}
+.t-공사{color:#9A3412}.t-구매{color:var(--navy)}.t-용역{color:#047857}
+.empty{padding:40px;text-align:center;color:var(--sub)}
+.foot{color:var(--mute);font-size:12px;margin-top:10px}
+/* modal */
+.mask{position:fixed;inset:0;background:rgba(17,24,39,.45);display:none;align-items:flex-start;justify-content:center;padding:24px;z-index:10;overflow:auto}
+.mask.open{display:flex}
+.modal{background:var(--card);border-radius:12px;width:min(1280px,100%);box-shadow:0 20px 50px rgba(0,0,0,.25)}
+.modal .mh{display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line);gap:10px}
+.modal .mh h2{margin:0;font-size:17px;flex:1}
+.modal .mb{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.modal .mf{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--line);justify-content:flex-end;flex-wrap:wrap}
+.modal .mf .sp{flex:1}
+.pane{padding:16px 18px;min-width:0}
+.pane.left{border-right:1px solid var(--line);background:#FAFAF7}
+.drop{border:2px dashed #CBD5E1;border-radius:10px;padding:30px 16px;text-align:center;color:var(--sub);background:#fff}
+.drop.over{border-color:var(--amber);background:var(--amber-l)}
+.drop b{color:var(--ink)}
+iframe.pdf,img.pdf{width:100%;height:68vh;border:1px solid var(--line);border-radius:8px;background:#fff;object-fit:contain}
+.ocr{margin-top:10px;font-size:12px;color:var(--sub)}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%;width:0;background:var(--amber);transition:width .2s}
+details.raw{margin-top:8px;font-size:12px}
+details.raw pre{white-space:pre-wrap;max-height:200px;overflow:auto;background:#fff;border:1px solid var(--line);padding:8px;border-radius:6px}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+.form .full{grid-column:1/-1}
+.form label{display:block;font-size:12px;color:var(--sub);margin-bottom:3px;font-weight:700}
+.form input,.form select,.form textarea{width:100%;font:inherit;padding:7px 9px;border:1px solid #D1D5DB;border-radius:6px;background:#fff}
+.form textarea{min-height:60px;resize:vertical}
+.form .chk input{background:var(--amber-l);border-color:#F59E0B}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.chip{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid #CBD5E1;background:#fff;cursor:pointer}
+.chip:hover{border-color:var(--amber);background:var(--amber-l)}
+.sect{font-size:13px;font-weight:700;color:var(--navy);margin:16px 0 8px;padding-bottom:4px;border-bottom:2px solid var(--navy-l)}
+.stages{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.stage{border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:#fff}
+.stage.done{background:var(--green-l);border-color:#A7F3D0}
+.stage label{margin:0 0 2px}
+.stage input{padding:4px 6px;font-size:12px}
+.note{font-size:12px;color:var(--sub);background:var(--amber-l);border-radius:6px;padding:6px 10px;margin-bottom:10px}
+.log{font-size:12px;color:var(--sub);max-height:120px;overflow:auto;margin:0;padding-left:18px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 18px;border-radius:8px;opacity:0;transition:opacity .25s;z-index:20;pointer-events:none}
+.toast.on{opacity:.95}
+/* 업체별 현황 */
+.vpanel{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--navy);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+.vp-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.vp-head h2{margin:2px 0 0;font-size:20px}
+.vp-head .sp{flex:1}
+.vp-sub{font-size:12px;color:var(--sub)}
+.vp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:12px 0 10px}
+.vp-box{background:var(--gray-l);border-radius:8px;padding:8px 12px}
+.vp-box .l{font-size:12px;color:var(--sub)}
+.vp-box .v{font-size:22px;font-weight:700}
+.vp-box .v small{font-size:12px;font-weight:400;color:var(--sub);margin-left:3px}
+.vp-stages{display:flex;gap:6px;flex-wrap:wrap}
+/* 출력 */
+#printArea{display:none}
+@media print{
+  @page{size:A4 landscape;margin:12mm}
+  body{background:#fff}
+  body>*:not(#printArea){display:none!important}
+  #printArea{display:block;color:#000;font-size:11px}
+  #printArea h1{font-size:20px;text-align:center;margin:0 0 10px;letter-spacing:4px}
+  #printArea table{width:100%;border-collapse:collapse;margin-bottom:8px}
+  #printArea th,#printArea td{border:1px solid #555;padding:4px 6px;white-space:normal}
+  #printArea th{background:#eee;color:#000;position:static}
+  #printArea .pr-meta th{width:12%}
+  #printArea .pr-list td.n{text-align:right}
+  #printArea .pr-list td.t{min-width:160px}
+  #printArea .pr-list tfoot td{font-weight:700;background:#f5f5f5}
+  #printArea .pr-stages{margin:0 0 8px}
+  #printArea tr{page-break-inside:avoid}
+}
+@media (max-width:900px){
+  .modal .mb{grid-template-columns:1fr}
+  .pane.left{border-right:0;border-bottom:1px solid var(--line)}
+  .form{grid-template-columns:1fr}
+  .stages{grid-template-columns:1fr 1fr}
+  main,header{padding-left:16px;padding-right:16px}
+}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>공사·구매 발주관리</h1>
+    <div class="sub">결재문서(품의서·기안지)를 등록하면 발주 목록으로 정리하고, 발주 이후 진행 단계를 관리합니다.</div>
+  </div>
+  <div class="sp"></div>
+  <button class="pri" id="btnNew">+ 결재문서 등록</button>
+  <button class="ghost" id="btnImport">기존 현황 엑셀 불러오기</button>
+  <button class="ghost" id="btnExport">엑셀 내보내기</button>
+  <button class="ghost" id="btnBackup">백업</button>
+  <button class="ghost" id="btnRestore">복원</button>
+  <input type="file" id="fImport" accept=".xls,.xlsx" hidden>
+  <input type="file" id="fRestore" accept=".json" hidden>
+</header>
+
+<main>
+  <div class="kpis" id="kpis"></div>
+  <div class="alerts" id="alerts" hidden></div>
+
+  <div class="tools">
+    <select id="fYear"></select>
+    <select id="fType"><option value="">구분 전체</option><option>공사</option><option>구매</option><option>용역</option></select>
+    <select id="fOwner"><option value="">담당자 전체</option></select>
+    <select id="fVendor" title="업체를 고르면 그 업체의 발주 현황을 보여 줍니다"><option value="">업체 전체</option></select>
+    <input id="fText" placeholder="문서번호·내용·업체 검색" size="28">
+    <div class="sp"></div>
+    <button class="danger" id="btnDelSel" hidden>선택 삭제</button>
+    <span id="sum" style="color:var(--sub)"></span>
+  </div>
+
+  <section class="vpanel" id="vendorPanel" hidden></section>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr>
+        <th class="ck"><input type="checkbox" id="chkAll" title="화면에 보이는 건 모두 선택"></th><th data-k="status">상태</th><th data-k="docNo">문서번호</th><th data-k="date">일자</th><th data-k="type">구분</th>
+        <th data-k="title">내용</th><th data-k="vendor">업체</th><th data-k="amount" class="num">금액(천원)</th>
+        <th data-k="owner">담당자</th><th data-k="dueDate">완료예정</th><th>다음 단계</th><th>문서</th>
+      </tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden>등록된 발주가 없습니다. <b>+ 결재문서 등록</b>으로 품의서 PDF를 올리거나, 기존 현황 엑셀을 불러오세요.</div>
+  </div>
+  <div class="foot">데이터는 이 PC의 브라우저(같은 브라우저·같은 파일 위치)에만 저장됩니다. 문서 내용은 외부 서버로 전송되지 않으며(OCR도 브라우저 안에서 처리), 정기적으로 <b>백업</b>을 받아 두세요.</div>
+</main>
+
+<!-- 등록/상세 모달 -->
+<div class="mask" id="mask">
+  <div class="modal">
+    <div class="mh"><h2 id="mTitle">결재문서 등록</h2><button id="mClose">닫기 ✕</button></div>
+    <div class="mb">
+      <div class="pane left">
+        <div class="drop" id="drop">
+          <div style="font-size:28px">📄</div>
+          <b>결재문서 PDF(또는 스캔 이미지)를 여기에 끌어다 놓으세요</b><br>
+          또는 <button class="sm" id="btnPick">파일 선택</button>
+          <div style="margin-top:6px;font-size:12px">파일을 올리면 문서를 읽어 오른쪽 항목을 자동으로 채웁니다. 노란 칸은 꼭 확인하세요.</div>
+          <input type="file" id="fDoc" accept="application/pdf,image/*" hidden>
+        </div>
+        <div id="viewer"></div>
+        <div class="ocr" id="ocr" hidden><span id="ocrMsg"></span><div class="bar"><i id="ocrBar"></i></div></div>
+        <details class="raw" id="rawBox" hidden><summary>읽어 낸 원문 보기</summary><pre id="rawText"></pre></details>
+      </div>
+      <div class="pane">
+        <div class="note" id="mNote" hidden></div>
+        <div class="form" id="form">
+          <div><label>문서번호</label><input id="docNo" placeholder="예: 지원팀-1234"></div>
+          <div><label>일자(결재완료일)</label><input id="date" type="date"></div>
+          <div><label>구분</label><select id="type"><option>공사</option><option>구매</option><option>용역</option></select></div>
+          <div><label>담당자</label><input id="owner" list="dlOwner"></div>
+          <div class="full"><label>내용(제목)</label><input id="title"></div>
+          <div><label>업체</label><input id="vendor" list="dlVendor"><div class="chips" id="cVendor"></div></div>
+          <div><label>금액(천원, VAT별도)</label><input id="amount" type="number" step="1"><div class="chips" id="cAmount"></div></div>
+          <div><label>투자계획 / 예산</label><input id="invest" placeholder="예: 26년 사업예산"></div>
+          <div><label>분류(철)</label><input id="file" list="dlFile" placeholder="예: 시설유지(수선)관련철(1)"></div>
+          <div><label>완료예정일(준공·납품 예정)</label><input id="dueDate" type="date"></div>
+          <div><label>현장·요청부서</label><input id="dept" placeholder="예: 신선대 / 운영팀"></div>
+          <div class="full"><label>비고</label><textarea id="memo"></textarea></div>
+        </div>
+        <div class="sect">발주 이후 진행 단계 <span style="font-weight:400;color:var(--sub);font-size:12px">— 날짜를 넣으면 그 단계로 넘어갑니다</span></div>
+        <div class="stages form" id="stages"></div>
+        <div id="logWrap" hidden>
+          <div class="sect">변경 이력</div>
+          <ul class="log" id="log"></ul>
+        </div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="danger" id="mDel" hidden>삭제</button>
+      <div class="sp"></div>
+      <button id="mCancel">취소</button>
+      <button class="pri" id="mSave">저장</button>
+    </div>
+  </div>
+</div>
+
+<datalist id="dlOwner"></datalist><datalist id="dlVendor"></datalist><datalist id="dlFile"></datalist>
+<div class="toast" id="toast"></div>
+<div id="printArea"></div>
+
+<script>
+'use strict';
+// ───────── 상수 ─────────
+const STAGES = [ // [필드, 단계 이름, 상태 라벨]
+  ['date', '발주(결재)', '발주완료'],
+  ['startDate', '착수·발주통보', '진행중'],
+  ['doneDate', '완료(준공·납품)', '완료'],
+  ['invoiceDate', '계산서 접수', '계산서접수'],
+  ['payDate', '대금 지급', '지급완료'],
+];
+const FIELDS = ['docNo','date','type','owner','title','vendor','amount','invest','file','dueDate','dept','memo'];
+const OWN_COMPANY = /신선대감만|터미널주식회사|BPT/;
+
+// ───────── IndexedDB ─────────
+let db;
+function openDb(){
+  return new Promise((ok, ng) => {
+    const rq = indexedDB.open('bpt-order-manager', 1);
+    rq.onupgradeneeded = () => {
+      const d = rq.result;
+      d.createObjectStore('orders', {keyPath:'id'});
+      d.createObjectStore('pdfs');
+    };
+    rq.onsuccess = () => { db = rq.result; ok(); };
+    rq.onerror = () => ng(rq.error);
+  });
+}
+function tx(store, mode, fn){
+  return new Promise((ok, ng) => {
+    const t = db.transaction(store, mode), s = t.objectStore(store);
+    const r = fn(s);
+    t.oncomplete = () => ok(r && r.result);
+    t.onerror = () => ng(t.error);
+  });
+}
+const dbAll = () => tx('orders','readonly', s => s.getAll());
+const dbPut = o => tx('orders','readwrite', s => s.put(o));
+const dbDel = id => tx('orders','readwrite', s => s.delete(id));
+const pdfPut = (id, blob) => tx('pdfs','readwrite', s => s.put(blob, id));
+const pdfGet = id => tx('pdfs','readonly', s => s.get(id));
+const pdfDel = id => tx('pdfs','readwrite', s => s.delete(id));
+async function dbPutMany(list){
+  await new Promise((ok, ng) => {
+    const t = db.transaction('orders','readwrite'), s = t.objectStore('orders');
+    list.forEach(o => s.put(o));
+    t.oncomplete = ok; t.onerror = () => ng(t.error);
+  });
+}
+
+// ───────── 유틸 ─────────
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2,'0');
+const ymd = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const today = () => ymd(new Date());
+const fmt = n => (n===''||n==null||isNaN(n)) ? '' : Number(n).toLocaleString('ko-KR');
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const days = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('on'),2600); }
+function validYmd(y,m,d){ const dt=new Date(y,m-1,d); return dt.getFullYear()==y && dt.getMonth()==m-1 && dt.getDate()==d; }
+function stageIndex(o){ let i=0; STAGES.forEach(([k],n)=>{ if(o[k]) i=n; }); return i; }
+function statusLabel(o){ return STAGES[stageIndex(o)][2]; }
+function guessType(t){
+  t = t || '';
+  if (/구매|구입|용품|물품/.test(t)) return '구매';
+  if (/용역|설계|세탁|점검|위탁/.test(t)) return '용역';
+  if (/공사|보수|설치|작업|포장|제거|교체|수리|제작|도장|정비/.test(t)) return '공사';
+  return '구매';
+}
+function alertsOf(o, td){
+  const a = [];
+  if (o.dueDate && !o.doneDate){
+    const d = days(td, o.dueDate);
+    if (d < 0) a.push(['late', `완료예정일 ${-d}일 경과`]);
+    else if (d <= 7) a.push(['soon', `완료예정 D-${d}`]);
+  }
+  if (o.doneDate && !o.invoiceDate && days(o.doneDate, td) > 14) a.push(['inv', `완료 후 ${days(o.doneDate, td)}일째 계산서 미접수`]);
+  if (o.invoiceDate && !o.payDate && days(o.invoiceDate, td) > 30) a.push(['pay', `계산서 접수 후 ${days(o.invoiceDate, td)}일째 미지급`]);
+  return a;
+}
+
+// ───────── 상태 ─────────
+let orders = [];
+let view = {kpi:'open', sortK:'date', sortDir:-1};
+let editing = null;   // 편집 중인 건(신규면 새 객체)
+let pendingBlob = null, pendingName = '';
+let viewerUrl = null;
+const selected = new Set(); // 목록에서 체크한 건의 id
+
+// ───────── 목록 렌더 ─────────
+function filtered(){
+  const y = $('fYear').value, ty = $('fType').value, ow = $('fOwner').value, vd = $('fVendor').value, q = $('fText').value.trim().toLowerCase(), td = today();
+  return orders.filter(o => {
+    if (y && (o.date||'').slice(0,4) !== y) return false;
+    if (ty && o.type !== ty) return false;
+    if (ow && o.owner !== ow) return false;
+    if (vd && o.vendor !== vd) return false;
+    if (q && !([o.docNo,o.title,o.vendor,o.memo,o.dept].join(' ').toLowerCase().includes(q))) return false;
+    const si = stageIndex(o);
+    switch (view.kpi){
+      case 'open': return si < 2;
+      case 'late': return alertsOf(o, td).some(a => a[0]==='late');
+      case 'inv': return si === 2;
+      case 'pay': return si === 3;
+      case 'closed': return si === 4;
+      default: return true;
+    }
+  });
+}
+function render(){
+  const td = today();
+  // 연도·담당자 필터 옵션
+  const years = [...new Set(orders.map(o => (o.date||'').slice(0,4)).filter(Boolean))].sort().reverse();
+  const curY = $('fYear').value;
+  $('fYear').innerHTML = '<option value="">연도 전체</option>' + years.map(y => `<option ${y===curY?'selected':''}>${y}</option>`).join('');
+  const owners = [...new Set(orders.map(o => o.owner).filter(Boolean))].sort();
+  const curO = $('fOwner').value;
+  $('fOwner').innerHTML = '<option value="">담당자 전체</option>' + owners.map(v => `<option ${v===curO?'selected':''}>${esc(v)}</option>`).join('');
+  $('dlOwner').innerHTML = owners.map(v => `<option value="${esc(v)}">`).join('');
+  $('dlVendor').innerHTML = [...new Set(orders.map(o => o.vendor).filter(Boolean))].sort().map(v => `<option value="${esc(v)}">`).join('');
+  const vCount = {};
+  orders.forEach(o => { if (o.vendor) vCount[o.vendor] = (vCount[o.vendor] || 0) + 1; });
+  const curV = $('fVendor').value;
+  $('fVendor').innerHTML = '<option value="">업체 전체</option>' + Object.keys(vCount).sort((a, b) => a.localeCompare(b, 'ko'))
+    .map(v => `<option value="${esc(v)}" ${v===curV?'selected':''}>${esc(v)} (${vCount[v]}건)</option>`).join('');
+  $('dlFile').innerHTML = [...new Set(orders.map(o => o.file).filter(Boolean))].sort().map(v => `<option value="${esc(v)}">`).join('');
+
+  // KPI (연도 필터만 반영)
+  const base = orders.filter(o => !$('fYear').value || (o.date||'').slice(0,4) === $('fYear').value);
+  const cnt = f => base.filter(f).length;
+  const amt = base.reduce((s,o) => s + (+o.amount||0), 0);
+  const K = [
+    ['open', '진행 중(완료 전)', cnt(o => stageIndex(o) < 2), '건'],
+    ['late', '완료예정 경과', cnt(o => alertsOf(o, td).some(a => a[0]==='late')), '건'],
+    ['inv', '완료·계산서 대기', cnt(o => stageIndex(o) === 2), '건'],
+    ['pay', '계산서 접수·지급 대기', cnt(o => stageIndex(o) === 3), '건'],
+    ['closed', '지급 완료', cnt(o => stageIndex(o) === 4), '건'],
+    ['all', '전체', base.length, `건 · ${fmt(amt)}천원`],
+  ];
+  $('kpis').innerHTML = K.map(([k,l,v,u]) => `<div class="kpi ${view.kpi===k?'on':''}" data-k="${k}"><div class="l">${l}</div><div class="v"${k==='late'&&v?' style="color:var(--red)"':''}>${v}<small>${u}</small></div></div>`).join('');
+
+  // 알림
+  const al = [];
+  orders.forEach(o => alertsOf(o, td).forEach(a => al.push([a[0], o, a[1]])));
+  const order = {late:0, soon:1, inv:2, pay:3};
+  al.sort((a,b) => order[a[0]] - order[b[0]]);
+  if (al.length){
+    $('alerts').hidden = false;
+    $('alerts').innerHTML = `<h3>확인이 필요한 발주 ${al.length}건</h3><ul>` + al.slice(0,12).map(([k,o,m]) =>
+      `<li data-id="${o.id}"><span class="${k==='late'?'warn':''}">[${m}]</span> ${esc(o.docNo)} · ${esc(o.title)} · ${esc(o.vendor||'업체 미입력')}</li>`).join('') +
+      (al.length > 12 ? `<li style="list-style:none;color:var(--mute)">외 ${al.length-12}건</li>` : '') + '</ul>';
+  } else $('alerts').hidden = true;
+
+  // 표
+  const rows = filtered();
+  const {sortK, sortDir} = view;
+  rows.sort((a,b) => {
+    let x = sortK==='status' ? stageIndex(a) : a[sortK], y = sortK==='status' ? stageIndex(b) : b[sortK];
+    if (sortK==='amount'){ x=+x||0; y=+y||0; }
+    if (sortK==='docNo'){ x=+(String(x||'').match(/\d+$/)||[0])[0]; y=+(String(y||'').match(/\d+$/)||[0])[0]; }
+    x = x ?? ''; y = y ?? '';
+    return (x > y ? 1 : x < y ? -1 : 0) * sortDir;
+  });
+  $('tbody').innerHTML = rows.map(o => {
+    const si = stageIndex(o), al2 = alertsOf(o, td), late = al2.some(a => a[0]==='late');
+    const next = si < 4 ? `<button class="sm" data-next="${o.id}">→ ${STAGES[si+1][1]}</button>` : '';
+    return `<tr data-id="${o.id}">
+      <td class="ck"><input type="checkbox" class="rowchk" data-id="${o.id}" ${selected.has(o.id)?'checked':''}></td>
+      <td><span class="badge s${si}">${STAGES[si][2]}</span></td>
+      <td>${esc(o.docNo)}</td><td>${esc(o.date)}</td><td class="t-${esc(o.type)}">${esc(o.type)}</td>
+      <td class="title">${esc(o.title)}${al2.length?` <span class="${late?'warn':''}" style="font-size:12px;color:${late?'':'var(--amber)'}">⚠ ${esc(al2[0][1])}</span>`:''}</td>
+      <td>${esc(o.vendor)}</td><td class="num">${fmt(o.amount)}</td><td>${esc(o.owner)}</td>
+      <td class="${late?'warn':''}">${esc(o.dueDate||'')}</td><td>${next}</td><td>${o.hasPdf?'📄':''}</td></tr>`;
+  }).join('');
+  // 화면에 안 보이게 된 건은 선택에서 뺀다 (보이지 않는 건이 지워지지 않도록)
+  const visible = new Set(rows.map(o => o.id));
+  [...selected].forEach(id => { if (!visible.has(id)) selected.delete(id); });
+  updateSel(rows.length);
+  $('empty').hidden = rows.length > 0;
+  renderVendorPanel();
+  $('sum').textContent = `${rows.length}건 · ${fmt(rows.reduce((s,o)=>s+(+o.amount||0),0))}천원`;
+}
+
+function updateSel(total){
+  if (total == null) total = $('tbody').querySelectorAll('.rowchk').length;
+  $('btnDelSel').hidden = selected.size === 0;
+  $('btnDelSel').textContent = `선택 삭제 (${selected.size}건)`;
+  $('chkAll').checked = total > 0 && selected.size === total;
+  $('chkAll').indeterminate = selected.size > 0 && selected.size < total;
+}
+async function deleteSelected(){
+  const list = orders.filter(o => selected.has(o.id));
+  if (!list.length) return;
+  const preview = list.slice(0, 5).map(o => `· ${o.docNo || ''} ${o.title || ''}`).join('\n') + (list.length > 5 ? `\n· 외 ${list.length - 5}건` : '');
+  if (!confirm(`선택한 ${list.length}건을 삭제할까요? (첨부 문서 포함, 되돌릴 수 없음)\n\n${preview}`)) return;
+  for (const o of list){ await dbDel(o.id); if (o.hasPdf) await pdfDel(o.id); }
+  orders = orders.filter(o => !selected.has(o.id));
+  selected.clear(); render(); toast(`${list.length}건을 삭제했습니다.`);
+}
+
+// ───────── 업체별 발주 현황 ─────────
+function vendorRows(){
+  const vd = $('fVendor').value, y = $('fYear').value;
+  return orders.filter(o => o.vendor === vd && (!y || (o.date || '').slice(0,4) === y))
+    .sort((a, b) => (a.date || '') < (b.date || '') ? -1 : (a.date || '') > (b.date || '') ? 1 : 0);
+}
+function vendorSummary(rows){
+  const sum = list => list.reduce((s, o) => s + (+o.amount || 0), 0);
+  const byStage = STAGES.map((st, i) => { const l = rows.filter(o => stageIndex(o) === i); return {label: st[2], n: l.length, amt: sum(l)}; });
+  const unpaid = rows.filter(o => !o.payDate);
+  return {n: rows.length, amt: sum(rows), byStage, unpaidN: unpaid.length, unpaidAmt: sum(unpaid),
+    first: rows[0] && rows[0].date, last: rows.length ? rows[rows.length - 1].date : '',
+    owners: [...new Set(rows.map(o => o.owner).filter(Boolean))].join(', ')};
+}
+function renderVendorPanel(){
+  const vd = $('fVendor').value, p = $('vendorPanel');
+  if (!vd){ p.hidden = true; return; }
+  const rows = vendorRows(), s = vendorSummary(rows), y = $('fYear').value;
+  p.hidden = false;
+  p.innerHTML = `
+    <div class="vp-head">
+      <div><div class="vp-sub">업체별 발주 현황 · ${y ? y + '년' : '전체 기간'}</div><h2>${esc(vd)}</h2></div>
+      <div class="sp"></div>
+      <button class="pri" id="btnVPrint">현황 출력</button>
+      <button id="btnVExcel">엑셀로 저장</button>
+      <button id="btnVClear">업체 선택 해제</button>
+    </div>
+    <div class="vp-grid">
+      <div class="vp-box"><div class="l">발주 건수</div><div class="v">${s.n}<small>건</small></div></div>
+      <div class="vp-box"><div class="l">발주 금액 합계</div><div class="v">${fmt(s.amt)}<small>천원</small></div></div>
+      <div class="vp-box"><div class="l">미지급(지급 전)</div><div class="v"${s.unpaidN ? ' style="color:var(--amber)"' : ''}>${s.unpaidN}<small>건 · ${fmt(s.unpaidAmt)}천원</small></div></div>
+      <div class="vp-box"><div class="l">발주 기간</div><div class="v" style="font-size:15px;margin-top:8px">${esc(s.first || '-')} ~ ${esc(s.last || '-')}</div></div>
+    </div>
+    <div class="vp-stages">${s.byStage.map((b, i) => `<span class="badge s${i}">${b.label} ${b.n}건 · ${fmt(b.amt)}천원</span>`).join('')}</div>
+    <div class="vp-sub" style="margin-top:6px">담당자: ${esc(s.owners || '-')} · 아래 목록에 이 업체의 발주가 모두 표시됩니다.</div>`;
+  $('btnVPrint').onclick = printVendor;
+  $('btnVExcel').onclick = () => { if (!window.XLSX) return toast('엑셀 도구를 불러오지 못했습니다(인터넷 연결 확인).'); exportExcel(`발주현황_${vd}_${today()}.xlsx`); };
+  $('btnVClear').onclick = () => { $('fVendor').value = ''; render(); };
+}
+function printVendor(){
+  const vd = $('fVendor').value, rows = vendorRows(), s = vendorSummary(rows), y = $('fYear').value;
+  $('printArea').innerHTML = `
+    <h1>업체별 발주 현황</h1>
+    <table class="pr-meta"><tr><th>업체명</th><td>${esc(vd)}</td><th>대상 기간</th><td>${y ? y + '년' : '전체'} (${esc(s.first || '-')} ~ ${esc(s.last || '-')})</td></tr>
+      <tr><th>발주 건수</th><td>${s.n}건</td><th>발주 금액 합계</th><td>${fmt(s.amt)}천원 (VAT 별도)</td></tr>
+      <tr><th>미지급</th><td>${s.unpaidN}건 · ${fmt(s.unpaidAmt)}천원</td><th>출력일</th><td>${today()}</td></tr></table>
+    <div class="pr-stages">${s.byStage.map(b => `${b.label} ${b.n}건(${fmt(b.amt)}천원)`).join(' · ')}</div>
+    <table class="pr-list">
+      <thead><tr><th>No</th><th>문서번호</th><th>일자</th><th>구분</th><th>내용</th><th>금액(천원)</th><th>담당자</th><th>상태</th><th>완료일자</th><th>계산서접수</th><th>지급일</th><th>비고</th></tr></thead>
+      <tbody>${rows.map((o, i) => `<tr><td>${i + 1}</td><td>${esc(o.docNo)}</td><td>${esc(o.date)}</td><td>${esc(o.type)}</td><td class="t">${esc(o.title)}</td>
+        <td class="n">${fmt(o.amount)}</td><td>${esc(o.owner)}</td><td>${statusLabel(o)}</td><td>${esc(o.doneDate || '')}</td><td>${esc(o.invoiceDate || '')}</td><td>${esc(o.payDate || '')}</td><td class="t">${esc(o.memo || '')}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><td colspan="5">합계 ${s.n}건</td><td class="n">${fmt(s.amt)}</td><td colspan="6"></td></tr></tfoot>
+    </table>`;
+  window.print();
+}
+
+// ───────── 모달 ─────────
+function setViewer(blob, name){
+  if (viewerUrl) URL.revokeObjectURL(viewerUrl);
+  viewerUrl = blob ? URL.createObjectURL(blob) : null;
+  const isImg = blob && /^image\//.test(blob.type);
+  $('viewer').innerHTML = !blob ? '' : isImg ? `<img class="pdf" src="${viewerUrl}" alt="${esc(name)}">` : `<iframe class="pdf" src="${viewerUrl}" title="${esc(name)}"></iframe>`;
+  $('drop').hidden = !!blob;
+}
+function renderStages(o){
+  // 1단계(발주)는 위의 '일자' 칸을 그대로 쓴다
+  $('stages').innerHTML = STAGES.map(([k,l],n) => n === 0
+    ? `<div class="stage done"><label>1. ${l}</label><div style="font-size:12px;color:var(--sub)">위 ‘일자’ 칸</div></div>`
+    : `<div class="stage ${o[k]?'done':''}">
+    <label>${n+1}. ${l}</label><input type="date" id="st_${k}" value="${esc(o[k]||'')}">
+    <button class="sm" style="margin-top:4px" data-today="${k}">오늘</button></div>`).join('');
+}
+function openModal(o){
+  editing = o ? structuredClone(o) : {id:uid(), log:[]};
+  pendingBlob = null; pendingName = '';
+  $('mTitle').textContent = o ? `발주 상세 · ${o.docNo||''}` : '결재문서 등록';
+  $('mDel').hidden = !o;
+  $('mNote').hidden = true;
+  $('ocr').hidden = true; $('rawBox').hidden = true;
+  $('cVendor').innerHTML = ''; $('cAmount').innerHTML = '';
+  FIELDS.forEach(k => { $(k).value = editing[k] ?? ''; $(k).parentElement.classList.remove('chk'); });
+  if (!o){ $('type').value = '공사'; }
+  renderStages(editing);
+  $('logWrap').hidden = !(editing.log && editing.log.length);
+  $('log').innerHTML = (editing.log||[]).slice().reverse().map(l => `<li>${esc(l.t)} — ${esc(l.msg)}</li>`).join('');
+  setViewer(null);
+  if (o && o.hasPdf) pdfGet(o.id).then(b => b && setViewer(b, o.pdfName));
+  $('mask').classList.add('open');
+}
+function closeModal(){ $('mask').classList.remove('open'); setViewer(null); editing = null; }
+
+async function saveModal(){
+  const o = editing, before = structuredClone(o), td = today();
+  FIELDS.forEach(k => o[k] = $(k).value.trim());
+  o.amount = o.amount === '' ? '' : Math.round(+o.amount);
+  STAGES.slice(1).forEach(([k]) => o[k] = $('st_'+k).value);
+  if (!o.docNo && !o.title){ toast('문서번호 또는 내용을 입력하세요.'); return; }
+  const dup = orders.find(x => x.docNo && x.docNo === o.docNo && x.id !== o.id);
+  if (dup && !confirm(`문서번호 ${o.docNo}가 이미 등록되어 있습니다(${dup.title}).\n그래도 저장할까요?`)) return;
+  if (!o.date) o.date = td;
+  const isNew = !orders.some(x => x.id === o.id);
+  o.log = o.log || [];
+  if (isNew) o.log.push({t: td, msg: pendingBlob ? `결재문서 등록 (${pendingName})` : '수기 등록'});
+  else {
+    const ch = [];
+    STAGES.forEach(([k,l]) => { if (before[k] !== o[k]) ch.push(`${l} ${o[k]||'삭제'}`); });
+    FIELDS.forEach(k => { if (k !== 'date' && String(before[k]??'') !== String(o[k]??'')) ch.push(`${$(k).closest('div').querySelector('label').textContent} 수정`); });
+    if (pendingBlob) ch.push(`문서 첨부 (${pendingName})`);
+    if (ch.length) o.log.push({t: td, msg: ch.join(', ')});
+  }
+  if (pendingBlob){ await pdfPut(o.id, pendingBlob); o.hasPdf = true; o.pdfName = pendingName; }
+  o.updatedAt = new Date().toISOString();
+  await dbPut(o);
+  const i = orders.findIndex(x => x.id === o.id);
+  if (i >= 0) orders[i] = o; else orders.push(o);
+  closeModal(); render(); toast('저장했습니다.');
+}
+
+// ───────── 문서 읽기(OCR) ─────────
+async function handleDoc(file){
+  if (!file) return;
+  pendingBlob = file; pendingName = file.name;
+  setViewer(file, file.name);
+  fromFileName(file.name);
+  if (!window.Tesseract || (!/^image\//.test(file.type) && !window.pdfjsLib)){
+    showNote('문서 자동 읽기 도구를 불러오지 못했습니다(인터넷 연결 확인). 왼쪽 문서를 보면서 직접 입력하세요.');
+    return;
+  }
+  $('ocr').hidden = false; setOcr('문서를 이미지로 바꾸는 중…', 3);
+  try {
+    const canvases = /^image\//.test(file.type) ? [await imgToCanvas(file)] : await pdfToCanvases(file, 2);
+    const worker = await Tesseract.createWorker('kor+eng', 1, {
+      logger: m => { if (m.status === 'recognizing text') setOcr(`글자 읽는 중… ${Math.round(m.progress*100)}%`, 10 + m.progress*85/canvases.length + curPage*85/canvases.length); else setOcr(ocrStatusKo(m.status), 5); }
+    });
+    let text = '';
+    const pages = [];
+    for (curPage = 0; curPage < canvases.length; curPage++){
+      const {data} = await worker.recognize(canvases[curPage], {}, {text: true, blocks: true});
+      text += data.text + '\n';
+      pages.push({canvas: canvases[curPage], words: wordsOf(data)});
+    }
+    // 담당자: 결재란 '담당' 칸 아래 이름 (그 칸만 잘라 한 번 더 읽는다)
+    setOcr('결재란 담당자 읽는 중…', 97);
+    let ap = null;
+    try { ap = await readApprover(pages, text, worker); } catch (e){ console.error(e); }
+    // 금액·업체: 빨간 테두리 칸 (금액은 그 칸만 잘라 한 번 더 읽는다)
+    setOcr('빨간 테두리 칸 읽는 중…', 98);
+    let red = null;
+    try { red = await readRedBox(pages, worker); } catch (e){ console.error(e); }
+    // 비고: 문서 표의 '비고' 칸 (그 칸만 잘라 한 번 더 읽는다)
+    let memo = '';
+    try { memo = await readRemarks(pages, worker); } catch (e){ console.error(e); }
+    // 제목: 문서의 '제 목' 줄만 잘라 다시 읽기
+    let tt = null;
+    try { tt = await readTitle(pages, text, worker); } catch (e){ console.error(e); }
+    await worker.terminate();
+    setOcr('읽기 완료 — 노란 칸을 확인하세요.', 100);
+    $('rawBox').hidden = false; $('rawText').textContent = text;
+    const r = extract(text, file.name);
+    r.memo = memo;
+    if (ap){ r.owner = ap.name; r.ownerFromBox = true; r.ownerImg = ap.img; }
+    // 제목: 문서의 '제 목' 줄 (품의서처럼 제목 줄이 없으면 기존 방식)
+    // 파일명에 제목이 있으면(예: "품의서(지원팀-1234, OO 포장공사).pdf") 글자 인식보다 정확하므로 그것을 쓴다
+    const fileTitle = (file.name.replace(/\.[^.]+$/, '').match(/\(([^)]*),([^)]*)\)/) || [])[2];
+    if (fileTitle && fileTitle.trim()){ tt = fileTitle.trim(); r.titleFromFile = true; }
+    if (!tt && /기안지|문서번호/.test(text.replace(/\s+/g, ''))){ r.title = ''; r.titleMissing = true; }
+    if (tt){ r.title = tt; r.titleFromDoc = !r.titleFromFile; if (r.type !== '구매' || !/물품구매품의서|구매품의서/.test(text.replace(/\s+/g, ''))) r.type = guessType(tt); }
+    // 비고: 문서 표의 '비고' 칸 내용
+    // 업체·금액: 빨간 테두리 칸을 먼저 쓰고, 없으면 문서에서 찾은 업체 중에서 고르게 한다
+    if (red){
+      r.red = red;
+      if (red.vendor){ r.vendor = red.vendor; r.vendors = [red.vendor, ...r.vendors.filter(v => v !== red.vendor)]; }
+      if (red.amount){ r.amount = red.amount; r.amounts = [[red.amount, '빨간 테두리'], ...r.amounts.filter(a => a[0] !== red.amount)]; r.amountNote = r.amountHint = null; }
+    }
+    applyExtract(r);
+  } catch (e){
+    console.error(e);
+    setOcr('자동 읽기 실패 — 직접 입력하세요. (' + (e.message||e) + ')', 0);
+  }
+}
+let curPage = 0;
+function ocrStatusKo(s){ return ({'loading tesseract core':'읽기 도구 준비 중…','initializing tesseract':'읽기 도구 준비 중…','loading language traineddata':'한글 글자 데이터 받는 중…(처음 한 번은 오래 걸립니다)','initializing api':'준비 중…'})[s] || '준비 중…'; }
+function setOcr(msg, pct){ $('ocrMsg').textContent = msg; $('ocrBar').style.width = Math.min(100, pct) + '%'; }
+function showNote(msg){ $('mNote').hidden = false; $('mNote').innerHTML = msg; }
+async function pdfToCanvases(file, maxPages){
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
+  const out = [];
+  for (let p = 1; p <= Math.min(pdf.numPages, maxPages); p++){
+    const page = await pdf.getPage(p), vp = page.getViewport({scale: 2.5});
+    const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+    await page.render({canvasContext: c.getContext('2d'), viewport: vp}).promise;
+    out.push(c);
+  }
+  return out;
+}
+function imgToCanvas(file){
+  return new Promise((ok, ng) => {
+    const im = new Image();
+    im.onload = () => { const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight; c.getContext('2d').drawImage(im,0,0); URL.revokeObjectURL(im.src); ok(c); };
+    im.onerror = ng; im.src = URL.createObjectURL(file);
+  });
+}
+function wordsOf(data){
+  if (data.words && data.words.length) return data.words;
+  const w = [];
+  (data.blocks || []).forEach(b => (b.paragraphs || []).forEach(p => (p.lines || []).forEach(l => (l.words || []).forEach(x => w.push(x)))));
+  return w;
+}
+// 결재문서에서 확정가·조정가를 표시한 빨간 테두리 칸의 위치를 찾는다
+function findRedRect(canvas){
+  const W = canvas.width, H = canvas.height, S = 2, w = Math.floor(W / S), h = Math.floor(H / S);
+  const px = canvas.getContext('2d').getImageData(0, 0, W, H).data;
+  const mask = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+    outer: for (let dy = 0; dy < S; dy++) for (let dx = 0; dx < S; dx++){
+      const i = ((y * S + dy) * W + (x * S + dx)) * 4, r = px[i], g = px[i+1], b = px[i+2];
+      if (r > 150 && g < 110 && b < 110 && r - g > 80){ mask[y * w + x] = 1; break outer; }
+    }
+  }
+  let best = null;
+  const seen = new Uint8Array(w * h), st = [];
+  for (let s = 0; s < w * h; s++){
+    if (!mask[s] || seen[s]) continue;
+    let x1 = w, y1 = h, x2 = 0, y2 = 0, n = 0;
+    st.push(s); seen[s] = 1;
+    while (st.length){
+      const p = st.pop(), x = p % w, y = (p - x) / w;
+      n++; if (x < x1) x1 = x; if (x > x2) x2 = x; if (y < y1) y1 = y; if (y > y2) y2 = y;
+      for (const q of [p - 1, p + 1, p - w, p + w])
+        if (q >= 0 && q < w * h && mask[q] && !seen[q] && Math.abs((q % w) - x) <= 1){ seen[q] = 1; st.push(q); }
+    }
+    const bw = x2 - x1 + 1, bh = y2 - y1 + 1;
+    // 빨간 글자는 작고 빽빽하며, 테두리는 크고 속이 비어 있다
+    if (bw >= 40 && bh >= 25 && n < 0.5 * bw * bh && (!best || bw * bh > best.w * best.h))
+      best = {x: x1 * S, y: y1 * S, w: bw * S, h: bh * S};
+  }
+  return best;
+}
+// 캔버스의 한 부분을 잘라(색 글자는 검게) 크게 키워 다시 읽는다
+async function ocrCrop(src, x, y, w, h, worker){
+  x = Math.max(0, Math.round(x)); y = Math.max(0, Math.round(y));
+  w = Math.round(Math.min(w, src.width - x)); h = Math.round(Math.min(h, src.height - y));
+  if (!worker || w < 10 || h < 10) return '';
+  const k = 2, c = document.createElement('canvas');
+  c.width = w * k; c.height = h * k;
+  const g = c.getContext('2d');
+  g.drawImage(src, x, y, w, h, 0, 0, c.width, c.height);
+  const im = g.getImageData(0, 0, c.width, c.height), d = im.data;
+  for (let i = 0; i < d.length; i += 4){
+    const r = d[i], gg = d[i+1], b = d[i+2];
+    const ink = (r > 150 && gg < 130 && b < 130 && r - gg > 60) || (r + gg + b) / 3 < 140; // 빨간 글자·검은 글자
+    d[i] = d[i+1] = d[i+2] = ink ? 0 : 255;
+  }
+  g.putImageData(im, 0, 0);
+  const {data} = await worker.recognize(c);
+  return String(data.text || '');
+}
+// 빨간 테두리 칸: 금액은 칸 안의 숫자, 업체는 칸 안의 업체명(없으면 칸 바로 위 머리글의 업체명). 표 단위는 천원으로 본다.
+async function readRedBox(pages, worker){
+  const KEY = /^(확정가|조정가|견적가|낙찰가|계약가|금액|비고|구분|물량|수량|단위|천원|VAT|별도|설치비|포함|설치비포함|업체|합계)$/;
+  const clean = t => String(t || '').replace(/[|\[\]{}"'“”‘’]/g, '').trim();
+  const isNum = t => /\d/.test(t) && /^[\d,.\s]+$/.test(t);
+  // '확정가·조정가·견적가' 같은 가격 머리글(잘못 읽혀 '조정 가', '조점가', '조정'이 되어도)은 업체명이 아니다
+  const headerLike = s => { const h = String(s).replace(/[^가-힣]/g, ''); return KEY.test(h) || (h.length >= 1 && h.length <= 3 && /가$|^[확조견낙계초]|정|찰/.test(h)); };
+  const isName = w => { const t = clean(w.text).replace(/\s/g, ''); return t.length >= 2 && !KEY.test(t) && !headerLike(t) && !isNum(t) && /[가-힣A-Za-z]/.test(t); };
+  // 한 줄에서 업체명만 남긴다: 머리글 낱말·숫자·영문 소문자 잡글자를 빼고 붙인다
+  const nameOf = line => {
+    if (headerLike(line.replace(/[\d,.\s]/g, ''))) return '';
+    const toks = clean(line).split(/\s+/).map(tk => tk.replace(/[^가-힣A-Za-z0-9()㈜&.\-]/g, ''))
+      .filter(tk => tk && !KEY.test(tk) && !isNum(tk) && !/^[a-z]+$/.test(tk) && !/^\d/.test(tk));
+    let s = toks.join('').replace(/^\((?:쥐|추|주|丰)\)|^㈜/, '(주)').replace(/\((?:쥐|추|丰)\)/, '(주)');
+    s = s.replace(/^[^가-힣A-Za-z(]+|[^가-힣A-Za-z)]+$/g, '');
+    return (s.match(/[가-힣]/g) || []).length >= 2 && !KEY.test(s) && !headerLike(s) ? s : '';
+  };
+  const cx = w => (w.bbox.x0 + w.bbox.x1) / 2, cy = w => (w.bbox.y0 + w.bbox.y1) / 2;
+  for (const pg of pages){
+    const box = findRedRect(pg.canvas);
+    if (!box) continue;
+    const ws = pg.words.filter(w => w.bbox && clean(w.text));
+    const inside = ws.filter(w => cx(w) >= box.x && cx(w) <= box.x + box.w && cy(w) >= box.y && cy(w) <= box.y + box.h);
+    // 1) 칸 안쪽(테두리 두께만큼 안으로)을 잘라 다시 읽기
+    const bw = Math.max(6, Math.round(Math.min(box.w, box.h) * 0.06));
+    const inText = await ocrCrop(pg.canvas, box.x + bw, box.y + bw, box.w - bw * 2, box.h - bw * 2, worker);
+    const inLines = inText.split(/\n/).map(s => s.trim()).filter(Boolean);
+    const ns = (inText.match(/\d{1,3}(?:[,.]\d{3})+|\d{2,}/g) || []).map(x => +x.replace(/[^\d]/g, '')).filter(n => n > 0);
+    let amount = ns.length ? ns[ns.length - 1] : null; // 머리글 아래(마지막 줄)의 숫자
+    if (!amount){
+      const numW = inside.filter(w => isNum(clean(w.text))).sort((a, b) => cy(b) - cy(a));
+      if (numW.length) amount = +clean(numW[0].text).replace(/[^\d]/g, '') || null;
+    }
+    let vendor = inLines.map(nameOf).find(Boolean) || '';
+    if (!vendor){
+      const vw = inside.filter(isName).sort((a, b) => a.bbox.y0 - b.bbox.y0 || a.bbox.x0 - b.bbox.x0);
+      if (vw.length) vendor = nameOf(vw.filter(w => Math.abs(cy(w) - cy(vw[0])) < (vw[0].bbox.y1 - vw[0].bbox.y0)).map(w => w.text).join(' '));
+    }
+    // 2) 칸 안에 업체명이 없으면 칸 바로 위 한 줄(표의 가로선까지)을 잘라 읽고, 칸에 가장 가까운 업체명을 쓴다
+    if (!vendor){
+      const W = pg.canvas.width, px = pg.canvas.getContext('2d').getImageData(0, 0, W, pg.canvas.height).data;
+      const dark = (x, y) => { const i = (y * W + x) * 4; return (px[i] + px[i+1] + px[i+2]) / 3 < 140; };
+      const hline = y => { let n = 0; const x0 = Math.round(box.x), x1 = Math.round(box.x + box.w); for (let x = x0; x < x1; x++) if (dark(x, y)) n++; return n >= (x1 - x0) * 0.85; };
+      let top = -1;
+      for (let y = Math.round(box.y) - bw - 2; y > Math.max(0, box.y - box.h); y--) if (hline(y)){ top = y; break; }
+      const y0 = top >= 0 ? top + 4 : box.y - box.h * 0.3;
+      const upText = await ocrCrop(pg.canvas, box.x - box.w, y0, box.w * 2, box.y - 3 - y0, worker);
+      const upLines = upText.split(/\n/).map(s => s.trim()).filter(Boolean).reverse(); // 칸에 가까운 줄부터
+      vendor = upLines.map(nameOf).find(Boolean) || '';
+      if (!vendor){
+        const above = ws.filter(w => isName(w) && cx(w) >= box.x - box.w && cx(w) <= box.x + box.w && cy(w) < box.y && cy(w) > y0 - 4);
+        if (above.length){
+          const near = Math.max(...above.map(cy));
+          vendor = nameOf(above.filter(w => Math.abs(cy(w) - near) < (w.bbox.y1 - w.bbox.y0)).sort((a, b) => a.bbox.x0 - b.bbox.x0).map(w => w.text).join(' '));
+        }
+      }
+    }
+    // 대조용 그림: 테두리 칸과 왼쪽 열·위쪽 머리글까지 잘라 둔다
+    const sx = Math.max(0, box.x - box.w), sy = Math.max(0, box.y - box.h * 0.6);
+    const sw = Math.min(pg.canvas.width - sx, box.w * 2 + 20), sh = Math.min(pg.canvas.height - sy, box.y + box.h + 20 - sy);
+    const c = document.createElement('canvas'), k = Math.min(1, 380 / sw);
+    c.width = sw * k; c.height = sh * k;
+    c.getContext('2d').drawImage(pg.canvas, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    return {vendor, amount, img: c.toDataURL('image/png')};
+  }
+  return null;
+}
+// 비고 한 줄 정리: 앞의 '*' 등을 떼고, 글자 인식이 지어낸 영문 소문자 단어(예: gross)·기호만 있는 조각은 버린다
+function cleanRemark(line){
+  const toks = String(line).trim().split(/\s+/).filter(tk => tk && !/^[a-z]+$/.test(tk) && !/^[|_\-—=.,'"`~:;]+$/.test(tk));
+  const s = toks.join(' ').replace(/^[*·•\-\s]+/, '').trim();
+  return /[가-힣0-9A-Z]/.test(s) ? s : '';
+}
+// 표의 '비고' 머리글 아래 칸에 적힌 내용을 읽는다. 칸의 좌우 경계와 표 끝은 표 선(어두운 세로선)으로 찾는다.
+async function readRemarks(pages, worker){
+  for (const pg of pages){
+    const ws = pg.words.filter(w => w.bbox && String(w.text || '').trim());
+    const t = w => String(w.text).replace(/\s/g, '');
+    const heads = [];
+    ws.forEach(w => {
+      if (t(w) === '비고') heads.push(w.bbox);
+      else if (t(w) === '비'){ // "비 고"가 두 단어로 읽힌 경우
+        const hh = w.bbox.y1 - w.bbox.y0;
+        const n = ws.find(x => t(x) === '고' && Math.abs(x.bbox.y0 - w.bbox.y0) < hh && x.bbox.x0 > w.bbox.x0 && x.bbox.x0 - w.bbox.x1 < hh * 4);
+        if (n) heads.push({x0: w.bbox.x0, y0: Math.min(w.bbox.y0, n.bbox.y0), x1: n.bbox.x1, y1: Math.max(w.bbox.y1, n.bbox.y1)});
+      }
+    });
+    if (!heads.length) continue;
+    const W = pg.canvas.width, H = pg.canvas.height, px = pg.canvas.getContext('2d').getImageData(0, 0, W, H).data;
+    const dark = (x, y) => { if (x < 0 || y < 0 || x >= W || y >= H) return false; const i = (y * W + x) * 4; return (px[i] + px[i+1] + px[i+2]) / 3 < 120; };
+    const vline = (x, y0, y1) => { let n = 0; for (let y = y0; y <= y1; y++) if (dark(x, y)) n++; return n >= (y1 - y0 + 1) * 0.8; };
+    const parts = [];
+    for (const h of heads){
+      const hh = h.y1 - h.y0, cy = Math.round((h.y0 + h.y1) / 2), y0 = Math.round(cy - hh * 0.75), y1 = Math.round(cy + hh * 0.75);
+      let left = -1, right = W;
+      for (let x = Math.round(h.x0) - 2; x >= 0; x--) if (vline(x, y0, y1)){ left = x; break; }
+      for (let x = Math.round(h.x1) + 2; x < W; x++) if (vline(x, y0, y1)){ right = x; break; }
+      if (left < 0) continue;
+      // 왼쪽 세로선을 따라 내려가며 표가 끝나는 곳을 찾는다
+      let y = Math.round(h.y1), gap = 0;
+      while (y < H && gap < 8){ if (dark(left, y) || dark(left - 1, y) || dark(left + 1, y)) gap = 0; else gap++; y++; }
+      const bottom = y - gap;
+      // 1) 비고 칸만 잘라(색 글자는 검게, 표 선 안쪽만) 크게 다시 읽기
+      if (worker){
+        const pad = Math.max(5, Math.round(hh * 0.3));
+        const ix = left + pad, iy = Math.round(h.y1 + hh * 0.4), iw = right - left - pad * 2, ih = bottom - iy - pad;
+        if (iw > 10 && ih > 10){
+          const k = 2, c = document.createElement('canvas');
+          c.width = iw * k; c.height = ih * k;
+          const g = c.getContext('2d');
+          g.drawImage(pg.canvas, ix, iy, iw, ih, 0, 0, c.width, c.height);
+          const im = g.getImageData(0, 0, c.width, c.height), d = im.data;
+          for (let i = 0; i < d.length; i += 4){
+            const r = d[i], gg = d[i+1], b = d[i+2], mx = Math.max(r, gg, b), mn = Math.min(r, gg, b);
+            const ink = (r + gg + b) / 3 < 140 || (mx - mn > 80 && mx < 250); // 검은·빨간·파란 글자
+            d[i] = d[i+1] = d[i+2] = ink ? 0 : 255;
+          }
+          g.putImageData(im, 0, 0);
+          const {data} = await worker.recognize(c);
+          String(data.text || '').split(/\n/).forEach(l => { const s = cleanRemark(l); if (s) parts.push(s); });
+          if (parts.length) continue;
+        }
+      }
+      // 2) 못 읽으면 전체 읽기 결과에서 그 칸 안의 글자
+      const cell = ws.filter(w => { const x = (w.bbox.x0 + w.bbox.x1) / 2, yy = (w.bbox.y0 + w.bbox.y1) / 2; return x > left && x < right && yy > h.y1 && yy < bottom; })
+        .sort((a, b) => (a.bbox.y0 + a.bbox.y1) - (b.bbox.y0 + b.bbox.y1) || a.bbox.x0 - b.bbox.x0);
+      // 줄 단위로 묶기
+      const rows = [];
+      cell.forEach(w => {
+        const yy = (w.bbox.y0 + w.bbox.y1) / 2, last = rows[rows.length - 1];
+        if (last && Math.abs(yy - last.y) < hh * 0.6) last.w.push(w); else rows.push({y: yy, w: [w]});
+      });
+      rows.forEach(r => {
+        const s = cleanRemark(r.w.sort((a, b) => a.bbox.x0 - b.bbox.x0).map(w => String(w.text).trim()).join(' '));
+        if (s) parts.push(s);
+      });
+    }
+    if (parts.length) return parts.join(' / ');
+  }
+  return '';
+}
+// 결재란 '담당' 머리글 아래의 이름을 읽는다. 결재란 칸은 [머리글 / 이름 / 날짜] 순서이므로
+// '담당' 머리글과 그 아래 날짜 줄 사이를 잘라 다시 읽는다. 협조란의 '기획담당'은 제외한다.
+async function readApprover(pages, text, worker){
+  const TITLE = /^(담당|팀장|본부장|대표이사|협조|기획|기획담당|지원팀|부장|실장|이사|합의)$/;
+  const isPerson = s => /^[가-힣]{2,4}$/.test(s) && !TITLE.test(s);
+  for (const pg of pages){
+    const ws = pg.words.filter(w => w.bbox && String(w.text || '').trim());
+    const t = w => String(w.text).replace(/\s/g, '');
+    const cx = b => (b.x0 + b.x1) / 2, cy = b => (b.y0 + b.y1) / 2;
+    const heads = (a, b) => { // 두 글자가 띄어 읽힌 머리글("담 당")도 하나로 합친다
+      const out = [];
+      ws.forEach(w => {
+        if (t(w) === a + b) out.push({b: w.bbox, w});
+        else if (t(w) === a){
+          const hh = w.bbox.y1 - w.bbox.y0;
+          const n = ws.find(x => t(x) === b && Math.abs(x.bbox.y0 - w.bbox.y0) < hh && x.bbox.x0 > w.bbox.x0 && x.bbox.x0 - w.bbox.x1 < hh * 4);
+          if (n) out.push({b: {x0: w.bbox.x0, y0: Math.min(w.bbox.y0, n.bbox.y0), x1: n.bbox.x1, y1: Math.max(w.bbox.y1, n.bbox.y1)}, w});
+        }
+      });
+      return out;
+    };
+    const teams = heads('팀', '장').map(x => x.b);
+    // 결재란의 '담당' 머리글: 바로 앞이 '기획'이 아니고, 같은 줄 오른쪽에 '팀장'이 있으면 그것을 우선
+    let cands = heads('담', '당').filter(({b: h, w}) => {
+      const hh = h.y1 - h.y0;
+      const prev = ws.find(x => x !== w && Math.abs(cy(x.bbox) - cy(h)) < hh * 0.7 && x.bbox.x1 <= h.x0 + 2 && h.x0 - x.bbox.x1 < hh * 2);
+      return !(prev && /기획$/.test(t(prev)));
+    }).map(c => c.b);
+    const teamOf = h => teams.filter(tm => Math.abs(cy(tm) - cy(h)) < (h.y1 - h.y0) && tm.x0 > h.x1).sort((a, b) => a.x0 - b.x0)[0];
+    cands.sort((a, b) => !!teamOf(b) - !!teamOf(a));
+    // '담당' 글자를 못 읽었으면 '팀장' 칸 왼쪽 한 칸을 담당 칸으로 본다
+    if (!cands.length && teams.length){
+      const tm = teams[0], bon = heads('본부', '장').concat(heads('본', '부장')).map(x => x.b).find(b => Math.abs(cy(b) - cy(tm)) < (tm.y1 - tm.y0));
+      const gap = bon ? cx(bon) - cx(tm) : (tm.y1 - tm.y0) * 8;
+      cands = [{x0: tm.x0 - gap, y0: tm.y0, x1: tm.x1 - gap, y1: tm.y1}];
+    }
+    for (const h of cands){
+      const hh = h.y1 - h.y0, tm = teamOf(h);
+      const colW = tm ? cx(tm) - cx(h) : hh * 7;           // 결재란 한 칸 너비
+      const xl = cx(h) - colW / 2 + 3, xr = cx(h) + colW / 2 - 3;
+      const inCol = b => cx(b) > xl && cx(b) < xr;
+      // 이름 아래 줄의 날짜 (예: 2026/10/28/ 08:43, 2026.11.13.)
+      const date = ws.filter(w => /20\d{2}\s?[\/.\-]\s?\d{1,2}/.test(t(w)) && inCol(w.bbox) && w.bbox.y0 > h.y1 && w.bbox.y0 - h.y1 < hh * 15)
+        .sort((a, b) => a.bbox.y0 - b.bbox.y0)[0];
+      const top = h.y1 + hh * 0.3, bottom = date ? date.bbox.y0 - hh * 0.1 : h.y1 + hh * 7;
+      const box = {x: Math.round(xl), y: Math.round(top), w: Math.round(xr - xl), h: Math.round(bottom - top)};
+      if (box.w < 10 || box.h < 10) continue;
+      // 1) 전체 읽기 결과에서 머리글과 날짜 사이의 이름 ("임 선재"처럼 끊겨 읽혀도 한 줄을 이어 붙여 본다)
+      const words = ws.filter(w => inCol(w.bbox) && cy(w.bbox) > top && cy(w.bbox) < bottom).sort((a, b) => a.bbox.x0 - b.bbox.x0);
+      const joined = words.map(w => t(w).replace(/[^가-힣]/g, '')).join('');
+      let name = isPerson(joined) ? joined : (words.map(t).find(isPerson) || null);
+      // 2) 이름을 못 찾았거나 두 글자뿐이면(앞 글자가 빠졌을 수 있음) 그 칸만 잘라 크게 다시 읽는다
+      if ((!name || name.length < 3) && worker){
+        const c = document.createElement('canvas'), k = 2;
+        c.width = box.w * k; c.height = box.h * k;
+        const g = c.getContext('2d');
+        g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+        g.drawImage(pg.canvas, box.x, box.y, box.w, box.h, 0, 0, c.width, c.height);
+        const {data} = await worker.recognize(c);
+        const lines = (data.text || '').split(/\n/);
+        const again = lines.map(l => l.replace(/[^가-힣]/g, '')).find(isPerson)
+          || lines.flatMap(l => l.split(/\s+/)).map(s => s.replace(/[^가-힣]/g, '')).find(isPerson) || null;
+        if (again && (!name || again.length > name.length)) name = again;
+      }
+      // 대조용 그림: 머리글부터 날짜까지
+      const iy = Math.round(h.y0 - hh * 0.3), ih = Math.round((date ? date.bbox.y1 : bottom) + hh * 0.3 - iy);
+      const v = document.createElement('canvas'), s = Math.min(1, 160 / box.w);
+      v.width = box.w * s; v.height = Math.max(1, ih * s);
+      v.getContext('2d').drawImage(pg.canvas, box.x, iy, box.w, ih, 0, 0, v.width, v.height);
+      if (name) return {name, img: v.toDataURL('image/png')};
+    }
+  }
+  // 위치 정보로 못 찾으면 글자 줄로: "담당 팀장 본부장 대표이사" 다음 이름 줄에서 담당 순서의 이름
+  const lines = text.split(/\n/).map(s => s.trim()).filter(Boolean);
+  const hi = lines.findIndex(l => /팀\s*장/.test(l) && /대\s*표\s*이\s*사|본\s*부\s*장/.test(l));
+  if (hi >= 0){
+    for (let i = hi + 1; i < Math.min(lines.length, hi + 4); i++){
+      const names = lines[i].split(/\s+/).filter(isPerson);
+      if (names.length >= 4) return {name: names[names.length - 4], img: null};
+    }
+  }
+  return null;
+}
+// 문서의 '제 목 :' 다음에 있는 내용을 제목으로 읽는다.
+// 글자 인식이 '제 목'을 '저 목', '제 묵', '제목:[긴급]…'처럼 읽어도 찾고, 찾은 줄은 잘라 크게 다시 읽어 오타를 줄인다.
+async function readTitle(pages, text, worker){
+  const strip = s => String(s).replace(/^[\s:：;.,ㆍ·|\-–—_~=*'"`]+/, '').replace(/[\s|\-–—_~=]+$/, '').replace(/\s{2,}/g, ' ').trim();
+  const hangul = s => (String(s).match(/[가-힣]/g) || []).length;
+  const JE = /^[제저재졔]$/, MOK = /^[목묵몰복뭇]$/;
+  // 1) 글자 줄에서 "제 목 :" 다음 내용 (콜론이 있어야 하므로 본문과 헷갈리지 않는다)
+  const fromText = (() => {
+    for (const ln of text.split(/\n/)){
+      const m = ln.match(/^[^가-힣]{0,3}([제저재졔])\s*([목묵몰복뭇])\s*[:：;.]\s*(.+)$/);
+      if (m && hangul(strip(m[3])) >= 2) return strip(m[3]);
+    }
+    return null;
+  })();
+  // 2) 단어 위치로 '제 목' 머리글을 찾고, 같은 줄 오른쪽 내용을 잘라 다시 읽는다
+  for (const pg of pages){
+    const ws = pg.words.filter(w => w.bbox && String(w.text || '').trim());
+    const t = w => String(w.text).replace(/\s/g, '');
+    const W = pg.canvas.width;
+    for (const w of ws){
+      if (w.bbox.x0 > W * 0.25) continue; // 머리글은 문서 왼쪽 칸에만 있다
+      let lab = null, glued = '';
+      const tw = t(w);
+      const g = tw.match(/^([제저재졔])([목묵몰복뭇])[:：;.]?(.*)$/);
+      if (g){ lab = w.bbox; glued = g[3]; }                 // "제목", "제목:", "제목:[긴급]운영팀"
+      else if (JE.test(tw)){                                 // "제" "목" 으로 끊긴 경우
+        const hh = w.bbox.y1 - w.bbox.y0;
+        const n = ws.find(x => MOK.test(t(x).replace(/[:：;.]$/, '')) && Math.abs(x.bbox.y0 - w.bbox.y0) < hh && x.bbox.x0 > w.bbox.x0 && x.bbox.x0 - w.bbox.x1 < hh * 6);
+        if (n) lab = {x0: w.bbox.x0, y0: w.bbox.y0, x1: n.bbox.x1, y1: n.bbox.y1};
+      }
+      if (!lab) continue;
+      const hh = lab.y1 - lab.y0, ly = (lab.y0 + lab.y1) / 2;
+      const row = ws.filter(x => x !== w && x.bbox.x0 > lab.x1 && Math.abs((x.bbox.y0 + x.bbox.y1) / 2 - ly) < hh * 0.7).sort((a, b) => a.bbox.x0 - b.bbox.x0);
+      const fromWords = strip([glued, ...row.map(x => String(x.text).trim())].join(' '));
+      if (worker && (row.length || glued)){
+        const first = row.find(x => !/^[:：;.\-–—_|]+$/.test(t(x)));
+        const x0 = first ? first.bbox.x0 - hh * 0.4 : lab.x1 + hh * 0.3;
+        const x1 = row.length ? row[row.length - 1].bbox.x1 + hh * 1.5 : W - hh;
+        const again = strip((await ocrCrop(pg.canvas, x0, ly - hh * 0.9, x1 - x0, hh * 1.8, worker)).split(/\n/).map(s => s.trim()).filter(Boolean)[0] || '');
+        if (hangul(again) >= 2 && hangul(again) >= hangul(fromWords) * 0.7) return again;
+      }
+      if (hangul(fromWords) >= 2) return fromWords;
+    }
+  }
+  if (fromText) return fromText;
+  // 3) 그래도 못 찾으면 기안지 양식 위치로: 문서번호 값(예: 지원팀-1234)과 같은 세로줄,
+  //    머리 부분 아래 문서 폭 전체의 굵은 가로선 바로 위 줄이 제목 줄이다
+  for (const pg of pages){
+    const ws = pg.words.filter(w => w.bbox && String(w.text || '').trim());
+    const t = w => String(w.text).replace(/\s/g, '');
+    const dn = ws.find(w => /[가-힣]+팀[-–—_~]?\d{2,5}/.test(t(w)));
+    if (!dn) continue;
+    const hh = dn.bbox.y1 - dn.bbox.y0;
+    const W = pg.canvas.width, H = pg.canvas.height, px = pg.canvas.getContext('2d').getImageData(0, 0, W, H).data;
+    const dark = (x, y) => { const i = (y * W + x) * 4; return (px[i] + px[i+1] + px[i+2]) / 3 < 140; };
+    const xa = Math.round(W * 0.1), xb = Math.round(W * 0.8);
+    let lineY = -1;
+    for (let y = Math.round(dn.bbox.y1 + hh); y < Math.min(H, dn.bbox.y1 + hh * 20); y++){
+      let n = 0;
+      for (let x = xa; x < xb; x += 2) if (dark(x, y)) n++;
+      if (n >= (xb - xa) / 2 * 0.9){ lineY = y; break; }
+    }
+    if (lineY < 0) continue;
+    const y0 = lineY - hh * 2.4, y1 = lineY - 2, x0 = dn.bbox.x0 - hh * 0.4;
+    const row = ws.filter(w => { const c = (w.bbox.y0 + w.bbox.y1) / 2; return c > y0 && c < y1 && w.bbox.x0 >= x0; }).sort((a, b) => a.bbox.x0 - b.bbox.x0);
+    const fromWords = strip(row.map(x => String(x.text).trim()).join(' '));
+    if (worker){
+      const lines = (await ocrCrop(pg.canvas, x0, y0, W - x0 - hh, y1 - y0, worker)).split(/\n/).map(s => strip(s)).filter(s => hangul(s) >= 2);
+      const again = lines[lines.length - 1] || ''; // 선에 가장 가까운 줄
+      if (hangul(again) >= 2 && hangul(again) >= hangul(fromWords) * 0.7) return again;
+    }
+    if (hangul(fromWords) >= 2) return fromWords;
+  }
+  return null;
+}
+// 파일명에서 문서번호·제목 (예: "품의서(지원팀-1234, OO 포장공사).pdf", "지원팀-1234.pdf")
+function fromFileName(name){
+  const base = name.replace(/\.[^.]+$/, '');
+  const m = base.match(/([가-힣A-Za-z]+팀)\s*[-_]\s*(\d{2,5})/);
+  if (m && !$('docNo').value) $('docNo').value = m[1] + '-' + m[2];
+  const p = base.match(/\(([^)]*),([^)]*)\)/);
+  if (p && !$('title').value){ $('title').value = p[2].trim(); $('type').value = guessType(p[2]); }
+}
+// OCR 원문에서 항목 추출. 확실하지 않은 값은 후보(칩)로만 보여 준다.
+function extract(text, fname){
+  const r = {vendors:[], amounts:[]};
+  const flat = text.replace(/\s+/g, '');
+  const lines = text.split(/\n/).map(s => s.trim()).filter(Boolean);
+  // 문서번호
+  const dm = flat.match(/문서번호[:：.]?([가-힣]{1,6}팀)[-–—~_]?(\d{2,5})/) || flat.match(/([가-힣]{1,6}팀)[-–—_](\d{2,5})/);
+  if (dm) r.docNo = dm[1] + '-' + dm[2];
+  // 제목: 기안지는 "제 목 :" 줄, 품의서는 "…을 아래와 같이 구매코저" 문장
+  for (const ln of lines){
+    if (/^제\s*목\s*[:：.]?/.test(ln)){ const t = ln.replace(/^제\s*목\s*[:：.]?\s*/, '').trim(); if (t.length > 1){ r.title = t; break; } }
+  }
+  if (!r.title){
+    const ln = lines.find(l => /아\s*래\s*와\s*같\s*이/.test(l));
+    if (ln){
+      let t = ln.replace(/\s*(을|를)?\s*아\s*래\s*와\s*같\s*이.*$/, '').trim();
+      if (/구\s*매|구\s*입/.test(ln) && !/구매|구입/.test(t)) t += ' 구매 품의';
+      if (t.length > 1) r.title = t;
+    }
+  }
+  if (/물품구매품의서|구매품의서/.test(flat)) r.type = '구매';
+  else if (r.title) r.type = guessType(r.title);
+  // 일자: 결재란 날짜 중 가장 늦은 날(대표이사 결재일)
+  const ds = [...text.matchAll(/(20\d{2})\s?[.\/-]\s?(\d{1,2})\s?[.\/-]\s?(\d{1,2})/g)]
+    .filter(x => validYmd(+x[1], +x[2], +x[3])).map(x => `${x[1]}-${pad(x[2])}-${pad(x[3])}`).sort();
+  if (ds.length) r.date = ds[ds.length - 1];
+  // 금액
+  const won = text.match(/[₩￦]\s?(\d{1,3}(?:,\d{3})+)/) || flat.match(/\(W(\d{1,3}(?:,\d{3})+)/);
+  const thousand = /천원/.test(flat) && !won;
+  if (won){
+    const v = +won[1].replace(/,/g,'');
+    r.amount = Math.round(v / 1000);
+    r.amountNote = `₩${won[1]} → ${fmt(r.amount)}천원으로 환산`;
+    r.amounts.push([r.amount, `₩${won[1]}`]);
+  }
+  const nums = [...new Set(text.match(/\d{1,3}(?:,\d{3})+/g) || [])].map(s => +s.replace(/,/g,''));
+  nums.sort((a,b) => b - a).slice(0, 12).forEach(n => {
+    const v = thousand ? n : Math.round(n / 1000);
+    if (v > 0 && !r.amounts.some(a => a[0] === v)) r.amounts.push([v, thousand ? fmt(n) : `${fmt(n)}원`]);
+  });
+  // 확정가·조정가가 있는 기안지는 그 근처 숫자를 우선 후보로
+  if (!won){
+    const km = text.match(/(확\s*정\s*가|조\s*정\s*가)[\s\S]{0,400}/);
+    if (km){
+      const near = (km[0].match(/\d{1,3}(?:,\d{3})+/g) || []).map(s => +s.replace(/,/g,''));
+      if (near.length){ const pick = Math.min(...near); r.amounts.sort((a,b) => (b[0]===pick) - (a[0]===pick)); r.amountHint = `‘${km[1].replace(/\s/g,'')}’ 근처 숫자 중 가장 작은 값을 맨 앞 후보로 두었습니다.`; }
+    }
+  }
+  // 업체: 이미 등록된 업체명이 문서에 있으면 우선, 그 다음 업체명 형태의 단어
+  const known = [...new Set(orders.map(o => o.vendor).filter(v => v && v.length >= 2))];
+  known.filter(v => flat.includes(v.replace(/\s+/g,''))).forEach(v => r.vendors.push(v));
+  const suf = /^(?:\(주\)|㈜)?[가-힣A-Za-z]{1,10}(?:종합건설|건설|종합상사|상사|산업|산전|전기|테크|시스템|엔지니어링|이엔지|기획|광고|로지텍|서비스|보험|물산|통신|건축|소방|ENG|CNC)$/;
+  text.split(/[\s|,()\[\]*]+/).forEach(tk => { if (suf.test(tk) && !OWN_COMPANY.test(tk) && !r.vendors.includes(tk)) r.vendors.push(tk); });
+  // "(주)OOO", "㈜OOO", "주식회사 OOO" 형태
+  (text.match(/(?:\(\s*주\s*\)|㈜|주식회사)\s?[가-힣A-Za-z]{2,10}/g) || []).forEach(tk => {
+    const v = tk.replace(/\s/g, '').replace(/^주식회사/, '(주)').replace(/^㈜/, '(주)');
+    if (!OWN_COMPANY.test(v) && !r.vendors.includes(v)) r.vendors.push(v);
+  });
+  // 완료예정: "작업일자 : 11/7-11/8" 같은 표현의 마지막 날짜
+  const wm = flat.match(/(?:작업일자|공사기간|납품기한|납기|준공)[:：]?[^\d]{0,3}(\d{1,2})[\/.](\d{1,2})(?:[-~](\d{1,2})[\/.](\d{1,2}))?/);
+  if (wm && r.date){
+    const y = +r.date.slice(0,4), mm = +(wm[3] || wm[1]), dd = +(wm[4] || wm[2]);
+    if (validYmd(y, mm, dd)) r.dueDate = `${y}-${pad(mm)}-${pad(dd)}`;
+  }
+  return r;
+}
+function applyExtract(r){
+  const filled = [], check = [];
+  const set = (k, v, sure) => {
+    if (v == null || v === '') { check.push(k); return; }
+    if ($(k).value && k !== 'date') return; // 파일명 등에서 이미 채운 값 유지
+    $(k).value = v; filled.push(k);
+    if (!sure) check.push(k);
+  };
+  set('docNo', r.docNo, true);
+  if (r.titleFromDoc || r.titleFromFile) $('title').value = '';
+  set('title', r.title, !!(r.titleFromDoc || r.titleFromFile));
+  if (r.type) $('type').value = r.type;
+  set('date', r.date, true);
+  set('amount', r.amount, !!(r.red && r.red.amount));
+  set('vendor', r.vendor, !!(r.red && r.red.vendor));
+  if (r.memo && !$('memo').value) $('memo').value = r.memo;
+  $('owner').value = r.ownerFromBox ? r.owner : ''; // 결재란 '담당'을 못 읽으면 비워 둔다
+  $('owner').parentElement.classList.toggle('chk', !r.ownerFromBox);
+  if (r.dueDate && !$('dueDate').value) $('dueDate').value = r.dueDate;
+  ['docNo','title','date','amount','vendor'].forEach(k => $(k).parentElement.classList.toggle('chk', check.includes(k) || !$(k).value));
+  $('cVendor').innerHTML = (r.vendors.length ? `<span style="font-size:12px;color:var(--sub)">문서에서 찾은 업체(눌러서 선택):</span>` : '') + r.vendors.slice(0,8).map(v => `<span class="chip" data-f="vendor" data-v="${esc(v)}">${esc(v)}</span>`).join('');
+  $('cAmount').innerHTML = r.amounts.slice(0,8).map(([v,l]) => `<span class="chip" data-f="amount" data-v="${v}" title="${esc(l)}">${fmt(v)}</span>`).join('');
+  const notes = ['자동으로 채운 값입니다. <b>노란 칸은 원문과 대조해 확인</b>한 뒤 저장하세요. 아래 회색 단추(후보)를 누르면 그 값이 들어갑니다.'];
+  if (r.red){
+    notes.push(`<b style="color:var(--red)">빨간 테두리</b> 칸에서 읽었습니다 → 업체: <b>${esc(r.red.vendor || '읽지 못함')}</b> · 금액: <b>${r.red.amount ? fmt(r.red.amount) + '천원' : '읽지 못함'}</b> (아래 그림과 대조하세요)` +
+      `<br><img src="${r.red.img}" alt="빨간 테두리 부분" style="max-width:100%;border:1px solid var(--line);border-radius:6px;margin-top:4px;background:#fff">`);
+  }
+  notes.push(r.ownerFromBox
+    ? `담당자: 결재란 ‘담당’ 칸에서 <b>${esc(r.owner)}</b>(으)로 읽었습니다.` + (r.ownerImg ? ` <img src="${r.ownerImg}" alt="담당 칸" style="height:44px;vertical-align:middle;border:1px solid var(--line);border-radius:4px;background:#fff">` : '')
+    : '담당자: 결재란 ‘담당’ 칸을 읽지 못했습니다. 직접 확인하세요.');
+  notes.push(r.titleMissing ? '제목: 문서의 ‘제 목 :’ 다음 내용을 읽지 못해 비워 두었습니다. 직접 입력하세요.' : r.titleFromFile ? '제목: 파일명에 적힌 제목을 넣었습니다.' : r.titleFromDoc ? '제목: 문서의 ‘제 목’ 줄에서 읽었습니다.' : '제목: 문서에 ‘제 목’ 줄이 없어(또는 읽지 못해) 본문 첫 문장으로 채웠습니다. 확인하세요.');
+  if (r.memo) notes.push('비고: 문서 표의 ‘비고’ 칸 내용을 비고에 넣었습니다. 원문과 대조하세요.');
+  if (r.amountNote) notes.push('금액: ' + r.amountNote);
+  if (r.amountHint) notes.push('금액: ' + r.amountHint + ' 확정가인지 확인하세요.');
+  if (!r.vendor) notes.push(r.vendors.length
+    ? `업체: 빨간 테두리 칸이 없어 문서에서 찾은 업체 ${Math.min(r.vendors.length, 8)}곳을 업체 칸 아래에 보여 드립니다. <b>눌러서 선택</b>하세요.`
+    : '업체: 빨간 테두리 칸도, 문서 속 업체명도 찾지 못했습니다. 직접 입력하세요.');
+  showNote(notes.join('<br>'));
+}
+
+// ───────── 엑셀 불러오기 (기존 "발주 현황" 양식) ─────────
+function cellDate(v){
+  if (v == null || v === '') return '';
+  if (typeof v === 'number' && v > 20000 && v < 80000){ const d = new Date(Math.round((v - 25569) * 86400000)); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}`; }
+  const m = String(v).match(/(20\d{2})\D(\d{1,2})\D(\d{1,2})/);
+  return m && validYmd(+m[1], +m[2], +m[3]) ? `${m[1]}-${pad(m[2])}-${pad(m[3])}` : '';
+}
+async function importExcel(file){
+  const wb = XLSX.read(await file.arrayBuffer(), {type:'array'});
+  const items = [];
+  wb.SheetNames.forEach(sn => {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], {header:1, raw:true, defval:''});
+    const hi = rows.findIndex(r => r.some(c => String(c).replace(/\s/g,'') === '문서번호'));
+    if (hi < 0) return;
+    const H = rows[hi].map(c => String(c).replace(/\s/g,''));
+    const col = (...names) => H.findIndex(h => names.some(n => h === n || h.includes(n)));
+    const c = {docNo:col('문서번호'), date:col('일자'), vendor:col('업체'), amount:col('공사금액','금액'), invest:col('투자계획'),
+               title:col('내용'), done:col('완료일자'), owner:col('담당자'), type:col('구분')};
+    // 계산서 접수 열: 머리글 위쪽 줄에 있는 경우도 찾음
+    let inv = -1;
+    for (let r = 0; r <= hi; r++){ const i = rows[r].findIndex(x => String(x).replace(/\s/g,'').includes('계산서')); if (i >= 0) inv = i; }
+    for (let r = hi + 1; r < rows.length; r++){
+      const R = rows[r], docNo = String(R[c.docNo] ?? '').trim();
+      if (!docNo) continue;
+      const title = String(R[c.title] ?? '').trim();
+      // 담당자 오른쪽 칸 중 "(1)" 또는 "철"이 들어간 값을 분류(철)로
+      let fileCat = '';
+      if (c.owner >= 0) for (let k = c.owner + 1; k < Math.min(R.length, c.owner + 4); k++){ const v = String(R[k]).trim(); if (/\(\d+\)$|철/.test(v)){ fileCat = v; break; } }
+      items.push({
+        id: uid(), docNo, title, date: cellDate(R[c.date]), vendor: String(R[c.vendor] ?? '').trim(),
+        amount: R[c.amount] === '' || isNaN(+String(R[c.amount]).replace(/,/g,'')) ? '' : Math.round(+String(R[c.amount]).replace(/,/g,'')),
+        invest: String(R[c.invest] ?? '').trim(), owner: String(R[c.owner] ?? '').trim(), file: fileCat,
+        type: c.type >= 0 && R[c.type] ? String(R[c.type]).trim() : guessType(title),
+        doneDate: c.done >= 0 ? cellDate(R[c.done]) : '', invoiceDate: inv >= 0 ? cellDate(R[inv]) : '',
+        log: [{t: today(), msg: `엑셀에서 가져옴 (${file.name} / ${sn})`}],
+      });
+    }
+  });
+  if (!items.length){ toast('“문서번호” 머리글이 있는 시트를 찾지 못했습니다.'); return; }
+  const have = new Set(orders.map(o => o.docNo));
+  const fresh = items.filter(o => !have.has(o.docNo));
+  const skip = items.length - fresh.length;
+  const noDone = fresh.filter(o => !o.doneDate);
+  let closeOld = false;
+  if (noDone.length) closeOld = confirm(`가져올 ${fresh.length}건 중 ${noDone.length}건은 완료일자가 비어 있습니다.\n\n지난 건이라 이미 끝났다면 [확인]을 누르세요 → "지급 완료"로 표시합니다(결재일과 같은 날짜로).\n[취소]를 누르면 "발주완료(진행 중)"으로 가져옵니다.`);
+  if (closeOld) noDone.forEach(o => { o.startDate = o.doneDate = o.invoiceDate = o.payDate = o.date; o.log.push({t: today(), msg: '가져오면서 완료 처리(날짜는 결재일로 대체)'}); });
+  await dbPutMany(fresh);
+  orders.push(...fresh);
+  render();
+  toast(`${fresh.length}건을 가져왔습니다.` + (skip ? ` (이미 있는 문서번호 ${skip}건 제외)` : ''));
+}
+
+// ───────── 내보내기·백업 ─────────
+function exportExcel(fileName){
+  const rows = filtered().sort((a,b) => (a.date||'') < (b.date||'') ? -1 : 1).map(o => ({
+    '문서번호': o.docNo, '일자': o.date, '구분': o.type, '업체': o.vendor, '금액(천원)': o.amount === '' ? '' : +o.amount,
+    '투자계획': o.invest, '내용': o.title, '담당자': o.owner, '분류(철)': o.file, '현장·요청부서': o.dept,
+    '완료예정일': o.dueDate, '착수일': o.startDate, '완료일자': o.doneDate, '계산서접수일': o.invoiceDate, '지급일': o.payDate,
+    '상태': statusLabel(o), '비고': o.memo,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [12,11,6,16,11,14,44,8,22,14,11,11,11,11,11,9,30].map(w => ({wch:w}));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '발주 현황');
+  XLSX.writeFile(wb, fileName || `발주현황_${today()}.xlsx`);
+}
+function blobToB64(b){ return new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(b); }); }
+async function backup(){
+  const pdfs = {};
+  for (const o of orders) if (o.hasPdf){ const b = await pdfGet(o.id); if (b) pdfs[o.id] = await blobToB64(b); }
+  const blob = new Blob([JSON.stringify({app:'bpt-order-manager', v:1, at:new Date().toISOString(), orders, pdfs})], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `발주관리_백업_${today()}.json`; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+async function restore(file){
+  const data = JSON.parse(await file.text());
+  if (data.app !== 'bpt-order-manager'){ toast('발주관리 백업 파일이 아닙니다.'); return; }
+  if (!confirm(`백업(${(data.at||'').slice(0,10)}, ${data.orders.length}건)으로 현재 데이터를 모두 바꿉니다. 계속할까요?`)) return;
+  await tx('orders','readwrite', s => s.clear());
+  await tx('pdfs','readwrite', s => s.clear());
+  await dbPutMany(data.orders);
+  for (const [id, url] of Object.entries(data.pdfs || {})) await pdfPut(id, await (await fetch(url)).blob());
+  orders = data.orders; render(); toast('복원했습니다.');
+}
+
+// ───────── 이벤트 ─────────
+$('btnNew').onclick = () => openModal(null);
+$('mClose').onclick = $('mCancel').onclick = closeModal;
+$('mSave').onclick = saveModal;
+$('mDel').onclick = async () => {
+  if (!editing || !confirm(`${editing.docNo || ''} ${editing.title || ''}\n이 발주를 삭제할까요? (첨부 문서 포함, 되돌릴 수 없음)`)) return;
+  await dbDel(editing.id); await pdfDel(editing.id);
+  orders = orders.filter(o => o.id !== editing.id); closeModal(); render(); toast('삭제했습니다.');
+};
+$('btnPick').onclick = () => $('fDoc').click();
+$('fDoc').onchange = e => { handleDoc(e.target.files[0]); e.target.value = ''; };
+const drop = $('drop');
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); handleDoc(e.dataTransfer.files[0]); };
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (!f || drop.contains(e.target)) return;
+  if (!$('mask').classList.contains('open')) openModal(null);
+  if (!pendingBlob) handleDoc(f);
+});
+$('form').addEventListener('click', e => {
+  const c = e.target.closest('.chip'); if (!c) return;
+  $(c.dataset.f).value = c.dataset.v; $(c.dataset.f).parentElement.classList.remove('chk');
+});
+$('form').addEventListener('input', e => e.target.parentElement.classList.remove('chk'));
+$('stages').addEventListener('click', e => {
+  const k = e.target.dataset.today; if (!k) return;
+  $('st_'+k).value = today(); $('st_'+k).closest('.stage').classList.add('done');
+});
+$('stages').addEventListener('change', e => e.target.closest('.stage').classList.toggle('done', !!e.target.value));
+$('tbody').addEventListener('click', async e => {
+  if (e.target.classList.contains('rowchk')){
+    e.target.checked ? selected.add(e.target.dataset.id) : selected.delete(e.target.dataset.id);
+    updateSel(); return;
+  }
+  const ckCell = e.target.closest('td.ck');
+  if (ckCell){ ckCell.querySelector('.rowchk').click(); return; }
+  const nb = e.target.closest('[data-next]');
+  if (nb){
+    const o = orders.find(x => x.id === nb.dataset.next), si = stageIndex(o), [k, l] = STAGES[si + 1];
+    const d = prompt(`${o.docNo} ${o.title}\n「${l}」 날짜를 입력하세요 (YYYY-MM-DD)`, today());
+    if (!d) return;
+    const m = d.trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (!m || !validYmd(+m[1], +m[2], +m[3])){ toast('날짜 형식이 맞지 않습니다. 예: 2026-11-18'); return; }
+    o[k] = `${m[1]}-${pad(m[2])}-${pad(m[3])}`;
+    (o.log = o.log || []).push({t: today(), msg: `${l} ${o[k]}`});
+    await dbPut(o); render(); toast(`${l} 단계로 넘겼습니다.`);
+    return;
+  }
+  const tr = e.target.closest('tr[data-id]');
+  if (tr) openModal(orders.find(o => o.id === tr.dataset.id));
+});
+$('alerts').addEventListener('click', e => { const li = e.target.closest('li[data-id]'); if (li) openModal(orders.find(o => o.id === li.dataset.id)); });
+$('kpis').addEventListener('click', e => { const k = e.target.closest('.kpi'); if (k){ view.kpi = k.dataset.k; render(); } });
+document.querySelector('thead').addEventListener('click', e => {
+  const k = e.target.dataset.k; if (!k) return;
+  view.sortDir = view.sortK === k ? -view.sortDir : (k === 'date' || k === 'amount' ? -1 : 1); view.sortK = k; render();
+});
+$('chkAll').onchange = e => {
+  $('tbody').querySelectorAll('.rowchk').forEach(c => { c.checked = e.target.checked; e.target.checked ? selected.add(c.dataset.id) : selected.delete(c.dataset.id); });
+  updateSel();
+};
+$('btnDelSel').onclick = deleteSelected;
+['fYear','fType','fOwner'].forEach(id => $(id).onchange = render);
+$('fVendor').onchange = () => { if ($('fVendor').value) view.kpi = 'all'; render(); }; // 업체를 고르면 모든 단계의 발주를 보여 준다
+$('fText').oninput = render;
+$('btnImport').onclick = () => { if (!window.XLSX) return toast('엑셀 도구를 불러오지 못했습니다(인터넷 연결 확인).'); $('fImport').click(); };
+$('fImport').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) importExcel(f).catch(err => { console.error(err); toast('엑셀을 읽지 못했습니다: ' + err.message); }); };
+$('btnExport').onclick = () => { if (!window.XLSX) return toast('엑셀 도구를 불러오지 못했습니다(인터넷 연결 확인).'); exportExcel(); };
+$('btnBackup').onclick = backup;
+$('btnRestore').onclick = () => $('fRestore').click();
+$('fRestore').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) restore(f).catch(err => toast('복원 실패: ' + err.message)); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('mask').classList.contains('open')) closeModal(); });
+
+openDb().then(dbAll).then(list => { orders = list || []; render(); })
+  .catch(err => { console.error(err); $('empty').hidden = false; $('empty').textContent = '브라우저 저장소를 열 수 없습니다: ' + err.message; });
+</script>
+</body>
+</html>

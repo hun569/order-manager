@@ -1,0 +1,5 @@
+# 앱 파일만 올리고 업무 자료(PDF·엑셀 등)는 올리지 않는다
+*
+!.gitignore
+!발주관리.html
+!README.md
