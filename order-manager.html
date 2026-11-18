@@ -166,7 +166,7 @@ details.raw pre{white-space:pre-wrap;max-height:200px;overflow:auto;background:#
     <select id="fType"><option value="">구분 전체</option><option>공사</option><option>구매</option><option>용역</option></select>
     <select id="fOwner"><option value="">담당자 전체</option></select>
     <select id="fVendor" title="업체를 고르면 그 업체의 발주 현황을 보여 줍니다"><option value="">업체 전체</option></select>
-    <input id="fText" placeholder="문서번호·내용·업체 검색" size="28">
+    <input id="fText" placeholder="문서번호·제목·업체 검색" size="28">
     <div class="sp"></div>
     <button class="danger" id="btnDelSel" hidden>선택 삭제</button>
     <span id="sum" style="color:var(--sub)"></span>
@@ -178,7 +178,7 @@ details.raw pre{white-space:pre-wrap;max-height:200px;overflow:auto;background:#
     <table>
       <thead><tr>
         <th class="ck"><input type="checkbox" id="chkAll" title="화면에 보이는 건 모두 선택"></th><th data-k="status">상태</th><th data-k="docNo">문서번호</th><th data-k="date">일자</th><th data-k="type">구분</th>
-        <th data-k="title">내용</th><th data-k="vendor">업체</th><th data-k="amount" class="num">금액(천원)</th>
+        <th data-k="title">제목</th><th data-k="vendor">업체</th><th data-k="amount" class="num">금액(천원)</th>
         <th data-k="owner">담당자</th><th data-k="dueDate">완료예정</th><th>다음 단계</th><th>문서</th>
       </tr></thead>
       <tbody id="tbody"></tbody>
@@ -212,7 +212,7 @@ details.raw pre{white-space:pre-wrap;max-height:200px;overflow:auto;background:#
           <div><label>일자(결재완료일)</label><input id="date" type="date"></div>
           <div><label>구분</label><select id="type"><option>공사</option><option>구매</option><option>용역</option></select></div>
           <div><label>담당자</label><input id="owner" list="dlOwner"></div>
-          <div class="full"><label>내용(제목)</label><input id="title"></div>
+          <div class="full"><label>제목</label><input id="title"></div>
           <div><label>업체</label><input id="vendor" list="dlVendor"><div class="chips" id="cVendor"></div></div>
           <div><label>금액(천원, VAT별도)</label><input id="amount" type="number" step="1"><div class="chips" id="cAmount"></div></div>
           <div><label>투자계획 / 예산</label><input id="invest" placeholder="예: 26년 사업예산"></div>
@@ -490,7 +490,7 @@ function printVendor(){
       <tr><th>미지급</th><td>${s.unpaidN}건 · ${fmt(s.unpaidAmt)}천원</td><th>출력일</th><td>${today()}</td></tr></table>
     <div class="pr-stages">${s.byStage.map(b => `${b.label} ${b.n}건(${fmt(b.amt)}천원)`).join(' · ')}</div>
     <table class="pr-list">
-      <thead><tr><th>No</th><th>문서번호</th><th>일자</th><th>구분</th><th>내용</th><th>금액(천원)</th><th>담당자</th><th>상태</th><th>완료일자</th><th>계산서접수</th><th>지급일</th><th>비고</th></tr></thead>
+      <thead><tr><th>No</th><th>문서번호</th><th>일자</th><th>구분</th><th>제목</th><th>금액(천원)</th><th>담당자</th><th>상태</th><th>완료일자</th><th>계산서접수</th><th>지급일</th><th>비고</th></tr></thead>
       <tbody>${rows.map((o, i) => `<tr><td>${i + 1}</td><td>${esc(o.docNo)}</td><td>${esc(o.date)}</td><td>${esc(o.type)}</td><td class="t">${esc(o.title)}</td>
         <td class="n">${fmt(o.amount)}</td><td>${esc(o.owner)}</td><td>${statusLabel(o)}</td><td>${esc(o.doneDate || '')}</td><td>${esc(o.invoiceDate || '')}</td><td>${esc(o.payDate || '')}</td><td class="t">${esc(o.memo || '')}</td></tr>`).join('')}</tbody>
       <tfoot><tr><td colspan="5">합계 ${s.n}건</td><td class="n">${fmt(s.amt)}</td><td colspan="6"></td></tr></tfoot>
@@ -538,7 +538,7 @@ async function saveModal(){
   FIELDS.forEach(k => o[k] = $(k).value.trim());
   o.amount = o.amount === '' ? '' : Math.round(+o.amount);
   STAGES.slice(1).forEach(([k]) => o[k] = $('st_'+k).value);
-  if (!o.docNo && !o.title){ toast('문서번호 또는 내용을 입력하세요.'); return; }
+  if (!o.docNo && !o.title){ toast('문서번호 또는 제목을 입력하세요.'); return; }
   const dup = orders.find(x => x.docNo && x.docNo === o.docNo && x.id !== o.id);
   if (dup && !confirm(`문서번호 ${o.docNo}가 이미 등록되어 있습니다(${dup.title}).\n그래도 저장할까요?`)) return;
   if (!o.date) o.date = td;
@@ -591,6 +591,9 @@ async function handleDoc(file){
     setOcr('빨간 테두리 칸 읽는 중…', 98);
     let red = null;
     try { red = await readRedBox(pages, worker); } catch (e){ console.error(e); }
+    // 업체: 빨간 테두리에서 못 찾으면 표의 '업체' 글자 아래 칸의 업체명
+    let vh = '';
+    if (!red || !red.vendor){ try { vh = await readVendorBelowHeader(pages, worker); } catch (e){ console.error(e); } }
     // 비고: 문서 표의 '비고' 칸 (그 칸만 잘라 한 번 더 읽는다)
     let memo = '';
     try { memo = await readRemarks(pages, worker); } catch (e){ console.error(e); }
@@ -605,7 +608,7 @@ async function handleDoc(file){
     if (ap){ r.owner = ap.name; r.ownerFromBox = true; r.ownerImg = ap.img; }
     // 제목: 문서의 '제 목' 줄 (품의서처럼 제목 줄이 없으면 기존 방식)
     // 파일명에 제목이 있으면(예: "품의서(지원팀-1234, OO 포장공사).pdf") 글자 인식보다 정확하므로 그것을 쓴다
-    const fileTitle = (file.name.replace(/\.[^.]+$/, '').match(/\(([^)]*),([^)]*)\)/) || [])[2];
+    const fileTitle = (file.name.replace(/\.[^.]+$/, '').match(/(?:^|\()[^,()]*?팀\s*[-_]\s*\d+\s*,\s*([^)]+)\)?\s*$/) || [])[1];
     if (fileTitle && fileTitle.trim()){ tt = fileTitle.trim(); r.titleFromFile = true; }
     if (!tt && /기안지|문서번호/.test(text.replace(/\s+/g, ''))){ r.title = ''; r.titleMissing = true; }
     if (tt){ r.title = tt; r.titleFromDoc = !r.titleFromFile; if (r.type !== '구매' || !/물품구매품의서|구매품의서/.test(text.replace(/\s+/g, ''))) r.type = guessType(tt); }
@@ -616,6 +619,7 @@ async function handleDoc(file){
       if (red.vendor){ r.vendor = red.vendor; r.vendors = [red.vendor, ...r.vendors.filter(v => v !== red.vendor)]; }
       if (red.amount){ r.amount = red.amount; r.amounts = [[red.amount, '빨간 테두리'], ...r.amounts.filter(a => a[0] !== red.amount)]; r.amountNote = r.amountHint = null; }
     }
+    if (vh){ r.vendor = vh; r.vendorFromHeader = true; r.vendors = [vh, ...r.vendors.filter(v => v !== vh)]; }
     applyExtract(r);
   } catch (e){
     console.error(e);
@@ -682,7 +686,7 @@ function findRedRect(canvas){
   return best;
 }
 // 캔버스의 한 부분을 잘라(색 글자는 검게) 크게 키워 다시 읽는다
-async function ocrCrop(src, x, y, w, h, worker){
+async function ocrCrop(src, x, y, w, h, worker, raw){
   x = Math.max(0, Math.round(x)); y = Math.max(0, Math.round(y));
   w = Math.round(Math.min(w, src.width - x)); h = Math.round(Math.min(h, src.height - y));
   if (!worker || w < 10 || h < 10) return '';
@@ -690,19 +694,22 @@ async function ocrCrop(src, x, y, w, h, worker){
   c.width = w * k; c.height = h * k;
   const g = c.getContext('2d');
   g.drawImage(src, x, y, w, h, 0, 0, c.width, c.height);
-  const im = g.getImageData(0, 0, c.width, c.height), d = im.data;
-  for (let i = 0; i < d.length; i += 4){
-    const r = d[i], gg = d[i+1], b = d[i+2];
-    const ink = (r > 150 && gg < 130 && b < 130 && r - gg > 60) || (r + gg + b) / 3 < 140; // 빨간 글자·검은 글자
-    d[i] = d[i+1] = d[i+2] = ink ? 0 : 255;
+  if (!raw){
+    const im = g.getImageData(0, 0, c.width, c.height), d = im.data;
+    for (let i = 0; i < d.length; i += 4){
+      const r = d[i], gg = d[i+1], b = d[i+2];
+      const ink = (r > 150 && gg < 130 && b < 130 && r - gg > 60) || (r + gg + b) / 3 < 140; // 빨간 글자·검은 글자
+      d[i] = d[i+1] = d[i+2] = ink ? 0 : 255;
+    }
+    g.putImageData(im, 0, 0);
   }
-  g.putImageData(im, 0, 0);
   const {data} = await worker.recognize(c);
   return String(data.text || '');
 }
 // 빨간 테두리 칸: 금액은 칸 안의 숫자, 업체는 칸 안의 업체명(없으면 칸 바로 위 머리글의 업체명). 표 단위는 천원으로 본다.
 async function readRedBox(pages, worker){
-  const KEY = /^(확정가|조정가|견적가|낙찰가|계약가|금액|비고|구분|물량|수량|단위|천원|VAT|별도|설치비|포함|설치비포함|업체|합계)$/;
+  // 표 머리글·금액 관련 낱말은 업체명이 아니다 (예: 빨간 테두리가 '비용' 열을 감싼 경우)
+  const KEY = /^(확정가|조정가|견적가|낙찰가|계약가|금액|비고|구분|물량|수량|단위|천원|VAT|Vat|vat|별도|설치비|포함|설치비포함|업체|업체명|합계|소계|총계|비용|공사비|수리비|단가|견적|견적금액|계약금액|확정금액|공급가|공급가액|부가세|내용|수리내역|품명|규격|원)$/;
   const clean = t => String(t || '').replace(/[|\[\]{}"'“”‘’]/g, '').trim();
   const isNum = t => /\d/.test(t) && /^[\d,.\s]+$/.test(t);
   // '확정가·조정가·견적가' 같은 가격 머리글(잘못 읽혀 '조정 가', '조점가', '조정'이 되어도)은 업체명이 아니다
@@ -766,6 +773,54 @@ async function readRedBox(pages, worker){
     return {vendor, amount, img: c.toDataURL('image/png')};
   }
   return null;
+}
+// 표의 '업체' 머리글(‘업 체’로 끊겨도) 바로 아래 칸의 업체명을 읽는다. 빨간 테두리로 업체를 못 찾았을 때 쓴다.
+// 칸의 좌우 경계는 표의 세로선, 위아래는 가로선으로 찾는다. 세로선이 없으면 표 머리글이 아닌 것으로 본다(예: '4. 업체 및 견적가' 제목 줄).
+async function readVendorBelowHeader(pages, worker){
+  const KEY = /^(업체|업체명|구분|내용|수량|금액|비용|합계|비고|견적가|확정가|조정가|단위|천원)$/;
+  for (const pg of pages){
+    const ws = pg.words.filter(w => w.bbox && String(w.text || '').trim());
+    const t = w => String(w.text).replace(/\s/g, '');
+    const heads = [];
+    ws.forEach(w => {
+      if (t(w) === '업체' || t(w) === '업체명') heads.push(w.bbox);
+      else if (t(w) === '업'){
+        const hh = Math.max(w.bbox.y1 - w.bbox.y0, 10);
+        const n = ws.find(x => t(x) === '체' && Math.abs(x.bbox.y0 - w.bbox.y0) < hh && x.bbox.x0 > w.bbox.x0 && x.bbox.x0 - w.bbox.x1 < hh * 4);
+        if (n) heads.push({x0: w.bbox.x0, y0: Math.min(w.bbox.y0, n.bbox.y0), x1: n.bbox.x1, y1: Math.max(w.bbox.y1, n.bbox.y1)});
+      }
+    });
+    if (!heads.length) continue;
+    const W = pg.canvas.width, H = pg.canvas.height, px = pg.canvas.getContext('2d').getImageData(0, 0, W, H).data;
+    const dark = (x, y) => { if (x < 0 || y < 0 || x >= W || y >= H) return false; const i = (y * W + x) * 4; return (px[i] + px[i+1] + px[i+2]) / 3 < 140; };
+    const vline = (x, y0, y1) => { let n = 0; for (let y = y0; y <= y1; y++) if (dark(x, y)) n++; return n >= (y1 - y0 + 1) * 0.8; };
+    const hline = (y, x0, x1) => { let n = 0; for (let x = x0; x <= x1; x++) if (dark(x, y)) n++; return n >= (x1 - x0 + 1) * 0.85; };
+    for (const h of heads){
+      const hh = Math.max(h.y1 - h.y0, 10), cy = Math.round((h.y0 + h.y1) / 2), y0 = Math.round(cy - hh * 0.6), y1 = Math.round(cy + hh * 0.6);
+      let left = -1, right = -1;
+      for (let x = Math.round(h.x0) - 2; x >= Math.max(0, h.x0 - hh * 15); x--) if (vline(x, y0, y1)){ left = x; break; }
+      for (let x = Math.round(h.x1) + 2; x < Math.min(W, h.x1 + hh * 15); x++) if (vline(x, y0, y1)){ right = x; break; }
+      if (left < 0 || right < 0) continue; // 표 칸이 아님
+      const lx = left + 4, rx = right - 4;
+      // 머리글 칸 아래 가로선 → 그 아래 칸의 아래 가로선
+      let top = -1, bottom = -1;
+      for (let y = Math.round(h.y1) + 1; y < Math.min(H, h.y1 + hh * 4); y++) if (hline(y, lx, rx)){ top = y; break; }
+      if (top < 0) continue;
+      while (top < H - 1 && hline(top + 1, lx, rx)) top++; // 선 두께만큼
+      for (let y = top + 4; y < Math.min(H, top + hh * 20); y++) if (hline(y, lx, rx)){ bottom = y; break; }
+      if (bottom < 0) bottom = Math.min(H, top + hh * 6);
+      const words = ws.filter(w => { const x = (w.bbox.x0 + w.bbox.x1) / 2, yy = (w.bbox.y0 + w.bbox.y1) / 2; return x > lx && x < rx && yy > top && yy < bottom; })
+        .sort((a, b) => a.bbox.y0 - b.bbox.y0 || a.bbox.x0 - b.bbox.x0);
+      const clean = s => String(s).split(/\n/).map(l => l.split(/\s+/).map(tk => tk.replace(/[^가-힣A-Za-z0-9()㈜&.\-]/g, ''))
+        .filter(tk => tk && !KEY.test(tk) && !/^[\d,.]+$/.test(tk) && !/^[a-z]+$/.test(tk)).join('')).filter(Boolean).join('')
+        .replace(/^\((?:쥐|추)\)|^㈜/, '(주)');
+      // 그 칸만 잘라 다시 읽고(흑백 처리 없이 2배), 안 되면 전체 읽기 결과의 글자
+      let name = clean(await ocrCrop(pg.canvas, lx, top + 3, rx - lx, bottom - top - 6, worker, true));
+      if ((name.match(/[가-힣]/g) || []).length < 2) name = clean(words.map(w => w.text).join(' '));
+      if ((name.match(/[가-힣]/g) || []).length >= 2) return name;
+    }
+  }
+  return '';
 }
 // 비고 한 줄 정리: 앞의 '*' 등을 떼고, 글자 인식이 지어낸 영문 소문자 단어(예: gross)·기호만 있는 조각은 버린다
 function cleanRemark(line){
@@ -926,16 +981,18 @@ async function readApprover(pages, text, worker){
   return null;
 }
 // 문서의 '제 목 :' 다음에 있는 내용을 제목으로 읽는다.
-// 글자 인식이 '제 목'을 '저 목', '제 묵', '제목:[긴급]…'처럼 읽어도 찾고, 찾은 줄은 잘라 크게 다시 읽어 오타를 줄인다.
+// 굵은 글씨의 '목'은 '5:'처럼 읽히기도 하므로, 왼쪽 칸의 '제' 바로 오른쪽 1~2개 짧은 조각('목', '5:', '_', ':')까지를 머리글로 본다.
+// 제목 줄은 잘라 2배로 다시 읽고, 한글이 가장 많은 줄을 쓴다(전체 읽기는 '외 부 차 량'처럼 띄어 읽는 일이 많다).
 async function readTitle(pages, text, worker){
   const strip = s => String(s).replace(/^[\s:：;.,ㆍ·|\-–—_~=*'"`]+/, '').replace(/[\s|\-–—_~=]+$/, '').replace(/\s{2,}/g, ' ').trim();
   const hangul = s => (String(s).match(/[가-힣]/g) || []).length;
+  const best = s => String(s).split(/\n/).map(strip).filter(l => hangul(l) >= 2).sort((a, b) => hangul(b) - hangul(a))[0] || '';
   const JE = /^[제저재졔]$/, MOK = /^[목묵몰복뭇]$/;
-  // 1) 글자 줄에서 "제 목 :" 다음 내용 (콜론이 있어야 하므로 본문과 헷갈리지 않는다)
+  // 1) 글자 줄: "제 목 :", "제 5:", "제 _ 목 :" 모두 허용 (콜론이 있어야 하므로 본문과 헷갈리지 않는다)
   const fromText = (() => {
     for (const ln of text.split(/\n/)){
-      const m = ln.match(/^[^가-힣]{0,3}([제저재졔])\s*([목묵몰복뭇])\s*[:：;.]\s*(.+)$/);
-      if (m && hangul(strip(m[3])) >= 2) return strip(m[3]);
+      const m = ln.match(/^[^가-힣]{0,3}[제저재졔][^:：;가-힣]{0,4}(?:[목묵몰복뭇][^:：;가-힣]{0,3})?[:：;]\s*(.+)$/);
+      if (m && hangul(strip(m[1])) >= 2) return strip(m[1]);
     }
     return null;
   })();
@@ -943,29 +1000,34 @@ async function readTitle(pages, text, worker){
   for (const pg of pages){
     const ws = pg.words.filter(w => w.bbox && String(w.text || '').trim());
     const t = w => String(w.text).replace(/\s/g, '');
+    const cy = b => (b.y0 + b.y1) / 2;
     const W = pg.canvas.width;
     for (const w of ws){
       if (w.bbox.x0 > W * 0.25) continue; // 머리글은 문서 왼쪽 칸에만 있다
-      let lab = null, glued = '';
-      const tw = t(w);
-      const g = tw.match(/^([제저재졔])([목묵몰복뭇])[:：;.]?(.*)$/);
-      if (g){ lab = w.bbox; glued = g[3]; }                 // "제목", "제목:", "제목:[긴급]운영팀"
-      else if (JE.test(tw)){                                 // "제" "목" 으로 끊긴 경우
-        const hh = w.bbox.y1 - w.bbox.y0;
-        const n = ws.find(x => MOK.test(t(x).replace(/[:：;.]$/, '')) && Math.abs(x.bbox.y0 - w.bbox.y0) < hh && x.bbox.x0 > w.bbox.x0 && x.bbox.x0 - w.bbox.x1 < hh * 6);
-        if (n) lab = {x0: w.bbox.x0, y0: w.bbox.y0, x1: n.bbox.x1, y1: n.bbox.y1};
+      const tw = t(w), hh = Math.max(w.bbox.y1 - w.bbox.y0, 10);
+      let labEnd = null, glued = '';
+      const g = tw.match(/^[제저재졔][목묵몰복뭇][:：;.]?(.*)$/);
+      if (g){ labEnd = w.bbox.x1; glued = g[1]; }          // "제목", "제목:", "제목:[긴급]운영팀"
+      else if (JE.test(tw)){                                // "제" 다음에 '목'·'5:'·'_'·':' 같은 짧은 조각
+        const right = ws.filter(x => x !== w && Math.abs(cy(x.bbox) - cy(w.bbox)) < hh && x.bbox.x0 > w.bbox.x1 && x.bbox.x0 - w.bbox.x1 < hh * 6)
+          .sort((a, b) => a.bbox.x0 - b.bbox.x0).slice(0, 2);
+        const labTok = right.filter(x => MOK.test(t(x).replace(/[:：;.]$/, '')) || (t(x).length <= 3 && hangul(t(x)) === 0)).pop();
+        if (labTok) labEnd = labTok.bbox.x1;
       }
-      if (!lab) continue;
-      const hh = lab.y1 - lab.y0, ly = (lab.y0 + lab.y1) / 2;
-      const row = ws.filter(x => x !== w && x.bbox.x0 > lab.x1 && Math.abs((x.bbox.y0 + x.bbox.y1) / 2 - ly) < hh * 0.7).sort((a, b) => a.bbox.x0 - b.bbox.x0);
+      if (labEnd == null) continue;
+      const ly = cy(w.bbox);
+      const row = ws.filter(x => x !== w && x.bbox.x0 > labEnd && Math.abs(cy(x.bbox) - ly) < hh * 0.7).sort((a, b) => a.bbox.x0 - b.bbox.x0);
       const fromWords = strip([glued, ...row.map(x => String(x.text).trim())].join(' '));
+      let again = '';
       if (worker && (row.length || glued)){
         const first = row.find(x => !/^[:：;.\-–—_|]+$/.test(t(x)));
-        const x0 = first ? first.bbox.x0 - hh * 0.4 : lab.x1 + hh * 0.3;
+        const x0 = first ? first.bbox.x0 - hh * 0.5 : labEnd + hh * 0.3;
         const x1 = row.length ? row[row.length - 1].bbox.x1 + hh * 1.5 : W - hh;
-        const again = strip((await ocrCrop(pg.canvas, x0, ly - hh * 0.9, x1 - x0, hh * 1.8, worker)).split(/\n/).map(s => s.trim()).filter(Boolean)[0] || '');
-        if (hangul(again) >= 2 && hangul(again) >= hangul(fromWords) * 0.7) return again;
+        again = best(await ocrCrop(pg.canvas, x0, ly - hh * 1.1, x1 - x0, hh * 2.2, worker, true));
       }
+      const top = Math.max(hangul(fromText), hangul(fromWords));
+      if (hangul(again) >= 2 && hangul(again) >= top * 0.7) return again;
+      if (fromText) return fromText;
       if (hangul(fromWords) >= 2) return fromWords;
     }
   }
@@ -1005,8 +1067,8 @@ function fromFileName(name){
   const base = name.replace(/\.[^.]+$/, '');
   const m = base.match(/([가-힣A-Za-z]+팀)\s*[-_]\s*(\d{2,5})/);
   if (m && !$('docNo').value) $('docNo').value = m[1] + '-' + m[2];
-  const p = base.match(/\(([^)]*),([^)]*)\)/);
-  if (p && !$('title').value){ $('title').value = p[2].trim(); $('type').value = guessType(p[2]); }
+  const p = base.match(/(?:^|\()[^,()]*?팀\s*[-_]\s*\d+\s*,\s*([^)]+)\)?\s*$/);
+  if (p && !$('title').value){ $('title').value = p[1].trim(); $('type').value = guessType(p[1]); }
 }
 // OCR 원문에서 항목 추출. 확실하지 않은 값은 후보(칩)로만 보여 준다.
 function extract(text, fname){
@@ -1088,7 +1150,7 @@ function applyExtract(r){
   if (r.type) $('type').value = r.type;
   set('date', r.date, true);
   set('amount', r.amount, !!(r.red && r.red.amount));
-  set('vendor', r.vendor, !!(r.red && r.red.vendor));
+  set('vendor', r.vendor, !!((r.red && r.red.vendor) || r.vendorFromHeader));
   if (r.memo && !$('memo').value) $('memo').value = r.memo;
   $('owner').value = r.ownerFromBox ? r.owner : ''; // 결재란 '담당'을 못 읽으면 비워 둔다
   $('owner').parentElement.classList.toggle('chk', !r.ownerFromBox);
@@ -1108,6 +1170,7 @@ function applyExtract(r){
   if (r.memo) notes.push('비고: 문서 표의 ‘비고’ 칸 내용을 비고에 넣었습니다. 원문과 대조하세요.');
   if (r.amountNote) notes.push('금액: ' + r.amountNote);
   if (r.amountHint) notes.push('금액: ' + r.amountHint + ' 확정가인지 확인하세요.');
+  if (r.vendorFromHeader) notes.push(`업체: 빨간 테두리 칸에서 못 찾아, 표의 ‘업체’ 글자 아래 칸에서 <b>${esc(r.vendor)}</b>(으)로 읽었습니다.`);
   if (!r.vendor) notes.push(r.vendors.length
     ? `업체: 빨간 테두리 칸이 없어 문서에서 찾은 업체 ${Math.min(r.vendors.length, 8)}곳을 업체 칸 아래에 보여 드립니다. <b>눌러서 선택</b>하세요.`
     : '업체: 빨간 테두리 칸도, 문서 속 업체명도 찾지 못했습니다. 직접 입력하세요.');
@@ -1131,7 +1194,7 @@ async function importExcel(file){
     const H = rows[hi].map(c => String(c).replace(/\s/g,''));
     const col = (...names) => H.findIndex(h => names.some(n => h === n || h.includes(n)));
     const c = {docNo:col('문서번호'), date:col('일자'), vendor:col('업체'), amount:col('공사금액','금액'), invest:col('투자계획'),
-               title:col('내용'), done:col('완료일자'), owner:col('담당자'), type:col('구분')};
+               title:col('제목', '내용'), done:col('완료일자'), owner:col('담당자'), type:col('구분')};
     // 계산서 접수 열: 머리글 위쪽 줄에 있는 경우도 찾음
     let inv = -1;
     for (let r = 0; r <= hi; r++){ const i = rows[r].findIndex(x => String(x).replace(/\s/g,'').includes('계산서')); if (i >= 0) inv = i; }
@@ -1170,7 +1233,7 @@ async function importExcel(file){
 function exportExcel(fileName){
   const rows = filtered().sort((a,b) => (a.date||'') < (b.date||'') ? -1 : 1).map(o => ({
     '문서번호': o.docNo, '일자': o.date, '구분': o.type, '업체': o.vendor, '금액(천원)': o.amount === '' ? '' : +o.amount,
-    '투자계획': o.invest, '내용': o.title, '담당자': o.owner, '분류(철)': o.file, '현장·요청부서': o.dept,
+    '투자계획': o.invest, '제목': o.title, '담당자': o.owner, '분류(철)': o.file, '현장·요청부서': o.dept,
     '완료예정일': o.dueDate, '착수일': o.startDate, '완료일자': o.doneDate, '계산서접수일': o.invoiceDate, '지급일': o.payDate,
     '상태': statusLabel(o), '비고': o.memo,
   }));
