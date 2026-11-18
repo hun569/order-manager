@@ -841,8 +841,11 @@ async function readRemarks(pages, worker){
   }
   return '';
 }
-// 결재란 '담당' 머리글 아래의 이름을 읽는다. 결재란 칸은 [머리글 / 이름 / 날짜] 순서이므로
-// '담당' 머리글과 그 아래 날짜 줄 사이를 잘라 다시 읽는다. 협조란의 '기획담당'은 제외한다.
+// 결재란 '담당' 머리글 아래의 이름을 읽는다. 결재란 칸은 [머리글 / 이름 / 날짜] 순서이다.
+// 머리글 찾는 순서: '담당' → '담 당'(두 단어로 끊김) → '당'만 읽힌 경우(‘담’이 빠짐, 같은 줄 오른쪽에 '팀장'이 있을 때)
+// → 그래도 없으면 '팀장' 칸 한 칸 왼쪽. 칸 너비는 '팀장'~'본부장' 간격으로 잰다.
+// 이름 줄은 전체 읽기에서 빠지는 일이 많으므로, 머리글~날짜 사이를 잘라 다시 읽고 날짜에 가장 가까운 이름 줄을 쓴다.
+// 협조란의 '기획담당'은 제외한다.
 async function readApprover(pages, text, worker){
   const TITLE = /^(담당|팀장|본부장|대표이사|협조|기획|기획담당|지원팀|부장|실장|이사|합의)$/;
   const isPerson = s => /^[가-힣]{2,4}$/.test(s) && !TITLE.test(s);
@@ -850,67 +853,65 @@ async function readApprover(pages, text, worker){
     const ws = pg.words.filter(w => w.bbox && String(w.text || '').trim());
     const t = w => String(w.text).replace(/\s/g, '');
     const cx = b => (b.x0 + b.x1) / 2, cy = b => (b.y0 + b.y1) / 2;
-    const heads = (a, b) => { // 두 글자가 띄어 읽힌 머리글("담 당")도 하나로 합친다
+    const near = (a, b, d) => Math.abs(cy(a) - cy(b)) < d;
+    // 한 단어("팀장")이거나 두 단어("팀" "장")로 끊긴 머리글을 찾는다
+    const heads = (word, a, b) => {
       const out = [];
       ws.forEach(w => {
-        if (t(w) === a + b) out.push({b: w.bbox, w});
+        if (t(w) === word) out.push({b: w.bbox, w});
         else if (t(w) === a){
-          const hh = w.bbox.y1 - w.bbox.y0;
-          const n = ws.find(x => t(x) === b && Math.abs(x.bbox.y0 - w.bbox.y0) < hh && x.bbox.x0 > w.bbox.x0 && x.bbox.x0 - w.bbox.x1 < hh * 4);
+          const gap = Math.max(w.bbox.y1 - w.bbox.y0, 10);
+          const n = ws.find(x => t(x) === b && Math.abs(cy(x.bbox) - cy(w.bbox)) < gap && x.bbox.x0 > w.bbox.x0 && x.bbox.x0 - w.bbox.x1 < gap * 5);
           if (n) out.push({b: {x0: w.bbox.x0, y0: Math.min(w.bbox.y0, n.bbox.y0), x1: n.bbox.x1, y1: Math.max(w.bbox.y1, n.bbox.y1)}, w});
         }
       });
       return out;
     };
-    const teams = heads('팀', '장').map(x => x.b);
-    // 결재란의 '담당' 머리글: 바로 앞이 '기획'이 아니고, 같은 줄 오른쪽에 '팀장'이 있으면 그것을 우선
-    let cands = heads('담', '당').filter(({b: h, w}) => {
-      const hh = h.y1 - h.y0;
-      const prev = ws.find(x => x !== w && Math.abs(cy(x.bbox) - cy(h)) < hh * 0.7 && x.bbox.x1 <= h.x0 + 2 && h.x0 - x.bbox.x1 < hh * 2);
-      return !(prev && /기획$/.test(t(prev)));
-    }).map(c => c.b);
-    const teamOf = h => teams.filter(tm => Math.abs(cy(tm) - cy(h)) < (h.y1 - h.y0) && tm.x0 > h.x1).sort((a, b) => a.x0 - b.x0)[0];
-    cands.sort((a, b) => !!teamOf(b) - !!teamOf(a));
-    // '담당' 글자를 못 읽었으면 '팀장' 칸 왼쪽 한 칸을 담당 칸으로 본다
-    if (!cands.length && teams.length){
-      const tm = teams[0], bon = heads('본부', '장').concat(heads('본', '부장')).map(x => x.b).find(b => Math.abs(cy(b) - cy(tm)) < (tm.y1 - tm.y0));
-      const gap = bon ? cx(bon) - cx(tm) : (tm.y1 - tm.y0) * 8;
-      cands = [{x0: tm.x0 - gap, y0: tm.y0, x1: tm.x1 - gap, y1: tm.y1}];
-    }
-    for (const h of cands){
-      const hh = h.y1 - h.y0, tm = teamOf(h);
-      const colW = tm ? cx(tm) - cx(h) : hh * 7;           // 결재란 한 칸 너비
-      const xl = cx(h) - colW / 2 + 3, xr = cx(h) + colW / 2 - 3;
+    for (const {b: tm} of heads('팀장', '팀', '장')){
+      const tol = Math.max((tm.y1 - tm.y0) * 2, 18);
+      // 칸 너비: 같은 줄 오른쪽 '본부장'(한 단어·끊긴 단어 모두)까지의 간격
+      const bon = [...heads('본부장', '본부', '장'), ...heads('본부장', '본', '부장')].map(x => x.b)
+        .filter(b => b.x0 > tm.x1 && near(b, tm, tol)).sort((a, b) => a.x0 - b.x0)[0];
+      const colW = bon ? cx(bon) - cx(tm) : Math.max((tm.x1 - tm.x0) * 3, 120);
+      // '담당' 머리글: 같은 줄, '팀장' 왼쪽 한 칸 안쪽
+      const okPos = b => b.x1 < tm.x0 && cx(tm) - cx(b) < colW * 1.5 && near(b, tm, tol);
+      let dang = heads('담당', '담', '당').map(x => x.b).filter(okPos)[0]
+        || ws.filter(w => t(w) === '당' && okPos(w.bbox)).map(w => w.bbox)[0]; // '담'이 빠지고 '당'만 읽힌 경우
+      const dcx = dang ? cx(dang) : cx(tm) - colW;
+      const xl = dcx - colW / 2 + 4, xr = dcx + colW / 2 - 4;
       const inCol = b => cx(b) > xl && cx(b) < xr;
-      // 이름 아래 줄의 날짜 (예: 2026/10/28/ 08:43, 2026.11.13.)
-      const date = ws.filter(w => /20\d{2}\s?[\/.\-]\s?\d{1,2}/.test(t(w)) && inCol(w.bbox) && w.bbox.y0 > h.y1 && w.bbox.y0 - h.y1 < hh * 15)
+      const headBottom = Math.max(tm.y1, dang ? dang.y1 : 0);
+      // 이름 아래 줄의 날짜 (예: 2026/10/28/ 08:43)
+      const date = ws.filter(w => /20\d{2}\s?[\/.\-]\s?\d{1,2}/.test(t(w)) && inCol(w.bbox) && w.bbox.y0 > headBottom && w.bbox.y0 - headBottom < colW * 1.5)
         .sort((a, b) => a.bbox.y0 - b.bbox.y0)[0];
-      const top = h.y1 + hh * 0.3, bottom = date ? date.bbox.y0 - hh * 0.1 : h.y1 + hh * 7;
+      const top = headBottom + 4, bottom = date ? date.bbox.y0 - 2 : headBottom + colW * 0.7;
       const box = {x: Math.round(xl), y: Math.round(top), w: Math.round(xr - xl), h: Math.round(bottom - top)};
       if (box.w < 10 || box.h < 10) continue;
-      // 1) 전체 읽기 결과에서 머리글과 날짜 사이의 이름 ("임 선재"처럼 끊겨 읽혀도 한 줄을 이어 붙여 본다)
+      // 1) 전체 읽기 결과에 이름이 있으면 ("임 선재"처럼 끊겨도 이어 붙인다)
       const words = ws.filter(w => inCol(w.bbox) && cy(w.bbox) > top && cy(w.bbox) < bottom).sort((a, b) => a.bbox.x0 - b.bbox.x0);
       const joined = words.map(w => t(w).replace(/[^가-힣]/g, '')).join('');
       let name = isPerson(joined) ? joined : (words.map(t).find(isPerson) || null);
-      // 2) 이름을 못 찾았거나 두 글자뿐이면(앞 글자가 빠졌을 수 있음) 그 칸만 잘라 크게 다시 읽는다
+      // 2) 없거나 두 글자뿐이면 그 칸만 잘라 다시 읽는다 (원래 크기 → 2배). 날짜에 가장 가까운(마지막) 이름 줄을 쓴다
       if ((!name || name.length < 3) && worker){
-        const c = document.createElement('canvas'), k = 2;
-        c.width = box.w * k; c.height = box.h * k;
-        const g = c.getContext('2d');
-        g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
-        g.drawImage(pg.canvas, box.x, box.y, box.w, box.h, 0, 0, c.width, c.height);
-        const {data} = await worker.recognize(c);
-        const lines = (data.text || '').split(/\n/);
-        const again = lines.map(l => l.replace(/[^가-힣]/g, '')).find(isPerson)
-          || lines.flatMap(l => l.split(/\s+/)).map(s => s.replace(/[^가-힣]/g, '')).find(isPerson) || null;
-        if (again && (!name || again.length > name.length)) name = again;
+        for (const k of [1, 2]){
+          const c = document.createElement('canvas');
+          c.width = box.w * k; c.height = box.h * k;
+          const g = c.getContext('2d');
+          g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+          g.drawImage(pg.canvas, box.x, box.y, box.w, box.h, 0, 0, c.width, c.height);
+          const {data} = await worker.recognize(c);
+          const found = (data.text || '').split(/\n/).map(l => l.replace(/[^가-힣]/g, '')).filter(isPerson);
+          const again = found[found.length - 1];
+          if (again && (!name || again.length > name.length)){ name = again; break; }
+        }
       }
+      if (!name) continue;
       // 대조용 그림: 머리글부터 날짜까지
-      const iy = Math.round(h.y0 - hh * 0.3), ih = Math.round((date ? date.bbox.y1 : bottom) + hh * 0.3 - iy);
-      const v = document.createElement('canvas'), s = Math.min(1, 160 / box.w);
-      v.width = box.w * s; v.height = Math.max(1, ih * s);
+      const iy = Math.round(Math.min(tm.y0, dang ? dang.y0 : tm.y0) - 6), ih = Math.round((date ? date.bbox.y1 : bottom) + 6 - iy);
+      const v = document.createElement('canvas'), sc = Math.min(1, 160 / box.w);
+      v.width = box.w * sc; v.height = Math.max(1, ih * sc);
       v.getContext('2d').drawImage(pg.canvas, box.x, iy, box.w, ih, 0, 0, v.width, v.height);
-      if (name) return {name, img: v.toDataURL('image/png')};
+      return {name, img: v.toDataURL('image/png')};
     }
   }
   // 위치 정보로 못 찾으면 글자 줄로: "담당 팀장 본부장 대표이사" 다음 이름 줄에서 담당 순서의 이름

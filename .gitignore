@@ -3,7 +3,7 @@
 !.gitignore
 !.vercelignore
 !index.html
-!발주관리.html
+!order-manager.html
 !README.md
 
 .vercel
